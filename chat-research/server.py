@@ -1,38 +1,72 @@
 """
-Servidor do chat TeIA.
+Servidor do chat TeIA — demo multi-tenant.
 
-Serve a página estática (index.html) e expõe POST /api/chat, que
-encaminha a conversa para a API da Anthropic (Claude Sonnet 5) com um
-system prompt que:
-  - injeta a identidade de marca (context/brand.md)
-  - injeta os princípios (context/principles.md)
-  - restringe as respostas ao conteúdo desses dois arquivos
+Serve a página estática (index.html) e expõe:
+  POST /api/login  -> autentica o usuário e devolve um token de sessão
+  POST /api/chat   -> encaminha a conversa para a API da Anthropic (Sonnet 5),
+                      usando a base de conhecimento e a chave de API do tenant
+                      identificado pelo token
+
+Tenants da demonstração:
+  - "teia" -> responde apenas com base em context/ (marca e princípios da TeIA)
+  - "ong"  -> responde apenas com base em examples-ong/ (docs fictícios da ONG)
+
+Cada tenant pode ter sua própria chave de API (variável de ambiente própria),
+de modo que a cobrança na Anthropic cai na conta/workspace daquele cliente.
+Se a chave do tenant não estiver definida, usa ANTHROPIC_API_KEY como fallback.
 
 Só usa a biblioteca padrão do Python — sem dependências para instalar.
 
 Uso:
   1. crie um arquivo .env na raiz do projeto com: ANTHROPIC_API_KEY=sk-ant-...
+     (opcional: ANTHROPIC_API_KEY_TEIA=... e ANTHROPIC_API_KEY_ONG=...)
   2. py server.py
-  3. abrir http://localhost:8000
+  3. abrir http://localhost:8000 e logar com teia/teia123 ou ong/ong123
 """
 
 import json
 import os
+import secrets
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ROOT.parent
 STATIC_DIR = ROOT
-CONTEXT_DIR = ROOT.parent / "context"
-ANTHROPIC_MODEL = "claude-sonnet-5"
+ANTHROPIC_MODEL = "claude-haiku-4-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 PORT = int(os.environ.get("PORT", "8000"))
 
+# --------------------------------------------------------------------------
+# Tenants — DEMONSTRAÇÃO APENAS.
+# Em produção: usuários e senhas ficam num banco com hash (bcrypt/argon2),
+# e as chaves de API num secrets manager, nunca em código.
+# --------------------------------------------------------------------------
+TENANTS = {
+    "teia": {
+        "password": "teia123",
+        "label": "TeIA",
+        "description": "identidade de marca, princípios e custos de IA da TeIA",
+        "context_dir": PROJECT_ROOT / "context",
+        "api_key_env": "ANTHROPIC_API_KEY_TEIA",
+    },
+    "ong": {
+        "password": "ong123",
+        "label": "Instituto Raízes do Amanhã",
+        "description": "documentos institucionais da ONG (missão, projetos, FAQ de doadores)",
+        "context_dir": PROJECT_ROOT / "examples-ong",
+        "api_key_env": "ANTHROPIC_API_KEY_ONG",
+    },
+}
+
+# token de sessão -> nome do tenant (memória; some ao reiniciar o servidor)
+SESSIONS: dict[str, str] = {}
+
 
 def load_dotenv():
-    env_path = ROOT.parent / ".env"
+    env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -47,32 +81,43 @@ def load_dotenv():
 load_dotenv()
 
 
-def load_context() -> str:
+def load_context(context_dir: Path) -> str:
     parts = []
-    for name in ("brand.md", "principles.md"):
-        path = CONTEXT_DIR / name
-        if path.exists():
-            parts.append(f"### {name}\n\n{path.read_text(encoding='utf-8')}")
+    for path in sorted(context_dir.glob("*.md")):
+        parts.append(f"### {path.name}\n\n{path.read_text(encoding='utf-8')}")
     return "\n\n---\n\n".join(parts)
 
 
-def build_system_prompt() -> str:
-    context = load_context()
-    return f"""Você é o assistente de chat oficial da TeIA. Encarne a identidade, o tom e o
-vocabulário descritos no material de marca abaixo — ele é a sua única fonte de
-conhecimento e a única identidade que você tem.
+def build_system_prompt(tenant: dict) -> str:
+    context = load_context(tenant["context_dir"])
+    return f"""Você é o assistente de chat da TeIA a serviço de: {tenant['label']}.
+Sua base de conhecimento cobre: {tenant['description']}.
 
 REGRAS DE ESCOPO (obrigatórias):
 1. Responda apenas com base no conteúdo entre as tags <base_de_conhecimento>.
-   Não use conhecimento geral sobre o mundo, outras empresas ou fatos externos
-   ao que está documentado ali.
+   Não use conhecimento geral sobre o mundo, outras organizações ou fatos
+   externos ao que está documentado ali.
 2. Se a pergunta não puder ser respondida com esse conteúdo, diga claramente
-   que essa informação não está na sua base de conhecimento atual e sugira
-   falar com a equipe da TeIA — não invente, não especule.
+   que essa informação não está na sua base de conhecimento atual — não
+   invente, não especule.
 3. Nunca finja ter tomado uma ação (publicar, enviar, decidir) — você apenas
    informa e sugere, seguindo o princípio "a IA sugere, a equipe decide".
-4. Mantenha o tom, o vocabulário-âncora e as regras de linguajar descritos em
-   brand.md §3. Evite hype, jargão não traduzido e promessas de automação total.
+4. Mantenha tom institucional, caloroso e sem hype, conforme o linguajar da
+   TeIA.
+
+ESTILO DE CONVERSA (obrigatório):
+- Responda como uma pessoa conversando, não como um documento. Escreva em
+  parágrafos curtos e corridos, como numa troca de mensagens.
+- NÃO use formatação Markdown: nada de títulos (#), negrito (**), itálico,
+  listas com hífen ou numeração, tabelas ou blocos de código. O chat exibe
+  texto puro, então esses símbolos aparecem literalmente para o usuário.
+- Seja direto: comece respondendo a pergunta, sem preâmbulos como "Ótima
+  pergunta" ou "Com base na minha base de conhecimento".
+- Prefira respostas curtas (2 a 4 parágrafos). Se o assunto tiver muitos
+  desdobramentos, responda o essencial e ofereça continuar: "quer que eu
+  detalhe X?".
+- Se precisar enumerar poucos itens, faça isso dentro da própria frase
+  ("são três frentes: educação, cultura e segurança alimentar").
 
 <base_de_conhecimento>
 {context}
@@ -80,10 +125,16 @@ REGRAS DE ESCOPO (obrigatórias):
 """
 
 
+def resolve_api_key(tenant: dict):
+    """Chave do tenant (cobrança na conta/workspace do cliente) ou fallback."""
+    return os.environ.get(tenant["api_key_env"]) or os.environ.get("ANTHROPIC_API_KEY")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    # ------------------------------------------------------------------ util
     def _send_json(self, status: int, payload: dict):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -92,6 +143,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            return json.loads(self.rfile.read(length) or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None
+
+    def _authenticate(self):
+        """Resolve o tenant a partir do header Authorization: Bearer <token>."""
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return None
+        username = SESSIONS.get(auth.removeprefix("Bearer ").strip())
+        return TENANTS.get(username) if username else None
+
+    # ------------------------------------------------------------------ GET
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/":
@@ -103,8 +170,10 @@ class Handler(BaseHTTPRequestHandler):
         if not file_path.is_file():
             self.send_error(404)
             return
-        content_type = "text/html; charset=utf-8" if file_path.suffix == ".html" else "application/octet-stream"
-        if file_path.suffix == ".css":
+        content_type = "application/octet-stream"
+        if file_path.suffix == ".html":
+            content_type = "text/html; charset=utf-8"
+        elif file_path.suffix == ".css":
             content_type = "text/css; charset=utf-8"
         elif file_path.suffix == ".js":
             content_type = "application/javascript; charset=utf-8"
@@ -115,20 +184,47 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    # ------------------------------------------------------------------ POST
     def do_POST(self):
-        if self.path != "/api/chat":
+        if self.path == "/api/login":
+            self._handle_login()
+        elif self.path == "/api/chat":
+            self._handle_chat()
+        else:
             self.send_error(404)
+
+    def _handle_login(self):
+        body = self._read_json_body()
+        if body is None:
+            self._send_json(400, {"error": "JSON inválido."})
             return
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        username = str(body.get("username", "")).strip().lower()
+        password = str(body.get("password", ""))
+        tenant = TENANTS.get(username)
+
+        # Demo: comparação direta. Em produção, hash + secrets.compare_digest.
+        if tenant is None or password != tenant["password"]:
+            self._send_json(401, {"error": "Usuário ou senha inválidos."})
+            return
+
+        token = secrets.token_hex(32)
+        SESSIONS[token] = username
+        self._send_json(200, {"token": token, "label": tenant["label"]})
+
+    def _handle_chat(self):
+        tenant = self._authenticate()
+        if tenant is None:
+            self._send_json(401, {"error": "Sessão inválida ou expirada. Faça login novamente."})
+            return
+
+        api_key = resolve_api_key(tenant)
         if not api_key:
-            self._send_json(500, {"error": "ANTHROPIC_API_KEY não está configurada no servidor."})
+            self._send_json(500, {"error": "Nenhuma chave de API configurada para este tenant."})
             return
 
-        length = int(self.headers.get("Content-Length", "0"))
-        try:
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        body = self._read_json_body()
+        if body is None:
             self._send_json(400, {"error": "JSON inválido."})
             return
 
@@ -140,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
         payload = {
             "model": ANTHROPIC_MODEL,
             "max_tokens": 1024,
-            "system": build_system_prompt(),
+            "system": build_system_prompt(tenant),
             "messages": messages,
         }
 
@@ -174,9 +270,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"TeIA chat rodando em http://localhost:{PORT}")
+    print(f"TeIA chat (multi-tenant demo) rodando em http://localhost:{PORT}")
+    print("Logins de demonstração: teia/teia123 | ong/ong123")
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("AVISO: variável de ambiente ANTHROPIC_API_KEY não definida.")
+        print("AVISO: ANTHROPIC_API_KEY não definida (fallback ausente).")
     server.serve_forever()
 
 

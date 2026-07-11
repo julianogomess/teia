@@ -17,14 +17,23 @@ TeIA é uma organização que vem do setor de impacto (ONGs, fundações, organi
 - [`context/brand.md`](context/brand.md) — identidade visual e linguajar da marca (paleta, tipografia, tom de voz, vocabulário-âncora).
 - [`context/principles.md`](context/principles.md) — guideline de decisão: princípios inegociáveis e operacionais a checar antes de qualquer entrega.
 - [`context/custos-ia.md`](context/custos-ia.md) — referência de custos: diferença entre assinatura Claude Pro e uso da API, estimativas por volume de uso.
-- [`chat-research/`](chat-research/) — chat web com a identidade da TeIA, que responde apenas com base no conteúdo de `context/` (ver abaixo).
+- [`examples-ong/`](examples-ong/) — documentos **fictícios** de uma ONG de exemplo (Instituto Raízes do Amanhã), usados como base de conhecimento do tenant ONG na demo.
+- [`chat-research/`](chat-research/) — chat web multi-tenant com a identidade da TeIA (ver abaixo).
+- [`docs/arquitetura-c4.md`](docs/arquitetura-c4.md) — arquitetura do chat em modelo C4 (Mermaid), incluindo o desenho de separação de cobrança por cliente e a tabela demo → produção.
 
-## Chat TeIA
+## Chat TeIA (demo multi-tenant)
 
-Protótipo de chat com Sonnet 5 por trás, restrito à base de conhecimento em `context/` — a IA não responde nada fora do que está documentado ali.
+Protótipo de chat com Claude (Haiku 4.5) por trás, com autenticação: cada usuário logado conversa **apenas com a base de conhecimento do seu tenant**, e cada tenant pode ter sua própria chave de API — direcionando a cobrança para a conta/workspace daquela organização.
 
-- [`chat-research/server.py`](chat-research/server.py) — servidor Python (só biblioteca padrão, sem dependências) que injeta `context/*.md` no system prompt e chama a API da Anthropic.
-- [`chat-research/index.html`](chat-research/index.html) — página única do chat, estilizada conforme `context/brand.md`.
+| Login | Senha | Base de conhecimento |
+|---|---|---|
+| `teia` | `teia123` | `context/` (marca, princípios e custos da TeIA) |
+| `ong` | `ong123` | `examples-ong/` (docs fictícios da ONG) |
+
+- [`chat-research/server.py`](chat-research/server.py) — servidor Python (só biblioteca padrão, sem dependências): `POST /api/login` emite token de sessão; `POST /api/chat` resolve o tenant, monta o system prompt com os `.md` da pasta dele e chama a API da Anthropic com a chave dele.
+- [`chat-research/index.html`](chat-research/index.html) — página única com tela de login + chat, estilizada conforme `context/brand.md`.
+
+> ⚠️ Autenticação simplificada para demonstração (usuários em código, sessões em memória). O caminho para produção está documentado em [`docs/arquitetura-c4.md`](docs/arquitetura-c4.md).
 
 ### Como rodar
 
@@ -32,10 +41,11 @@ Protótipo de chat com Sonnet 5 por trás, restrito à base de conhecimento em `
    ```
    ANTHROPIC_API_KEY=sk-ant-sua-chave-aqui
    ```
-   (chave obtida em [console.anthropic.com](https://console.anthropic.com) → API Keys — requer billing configurado, é uma conta separada da assinatura Claude Pro)
+   Chave obtida em [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) — requer billing configurado, é uma conta separada da assinatura Claude Pro. Opcionalmente, defina `ANTHROPIC_API_KEY_TEIA` e `ANTHROPIC_API_KEY_ONG` para separar a cobrança por tenant.
 2. Rode o servidor:
    ```powershell
    cd chat-research
    py server.py
    ```
-3. Abra `http://localhost:8000`.
+3. Abra `http://localhost:8000` e entre com um dos logins da tabela acima.
+4. Editou o `.env`? Reinicie o servidor — ele lê o arquivo só na inicialização.
