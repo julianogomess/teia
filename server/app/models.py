@@ -5,12 +5,29 @@ users          -> contas (senha e/ou Google), papel e cota individual
 refresh_tokens -> sessões revogáveis (hash do token, nunca o token em si)
 usage_events   -> um registro por chamada de IA (tokens, custo, latência)
 auth_events    -> tentativas de login (sucesso/falha) para o painel de segurança
+
+Base de conhecimento (ingestão indexada):
+documents       -> arquivo ingerido por tenant (original fica no disco)
+document_chunks -> trechos de ~700 tokens; embedding opcional (float32 bytes)
+tags            -> taxonomia hierárquica por tenant (caminho materializado)
+document_tags   -> associação documento<->tag
+ingest_jobs     -> fila de processamento no próprio banco
 """
 
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -103,3 +120,82 @@ class AuthEvent(Base):
     success: Mapped[bool] = mapped_column(Boolean, default=False)
     detail: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+# --- base de conhecimento ----------------------------------------------------
+
+DOCUMENT_STATUSES = ("pending", "processing", "indexed", "error")
+TAG_STATUSES = ("approved", "pending", "rejected")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    ext: Mapped[str] = mapped_column(String(10))
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    # caminho do original, relativo a server/ (ou absoluto em testes)
+    stored_path: Mapped[str] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text)
+    # vetor float32 serializado; NULL quando embeddings estão desligados
+    embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+
+    document: Mapped["Document"] = relationship()
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+    __table_args__ = (UniqueConstraint("organization_id", "path"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    # caminho materializado ("rh/beneficios/ferias"): consulta por prefixo
+    # cobre qualquer nível da hierarquia com o índice comum
+    path: Mapped[str] = mapped_column(String(255), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="approved")
+    source: Mapped[str] = mapped_column(String(20), default="admin")  # admin | ia
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DocumentTag(Base):
+    __tablename__ = "document_tags"
+    __table_args__ = (UniqueConstraint("document_id", "tag_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id"), index=True)
+
+    tag: Mapped["Tag"] = relationship()
+
+
+class IngestJob(Base):
+    __tablename__ = "ingest_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    # pending | running | done | error
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

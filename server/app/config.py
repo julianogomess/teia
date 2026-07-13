@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     anthropic_timeout_seconds: int = 60
     max_reply_tokens: int = 1024
 
+    # --- base de conhecimento (ingestão e busca) ----------------------------
+    kb_worker_enabled: bool = True           # thread de ingestão no startup
+    kb_chunk_chars: int = 2800               # ~700 tokens por chunk
+    kb_chunk_overlap_chars: int = 300        # sobreposição entre chunks
+    kb_top_k: int = 8                        # chunks injetados por pergunta
+    kb_max_upload_bytes: int = 50 * 1024 * 1024  # corpo máximo no upload
+    kb_classify_model: str = "claude-haiku-4-5"  # classificação de tags
+    kb_classify_excerpt_chars: int = 6000    # trecho enviado ao classificador
+    upload_dir: str = "uploads"              # originais; relativo a server/
+    # Embeddings (Voyage). A chave vem de VOYAGE_API_KEY, sem prefixo,
+    # como as chaves da Anthropic — nunca no banco.
+    voyage_api_url: str = "https://api.voyageai.com/v1/embeddings"
+    voyage_model: str = "voyage-3.5-lite"
+    voyage_output_dim: int = 512
+    voyage_timeout_seconds: int = 60
+
     # --- limites e cotas (defaults; por usuário/tenant ajustável no banco) --
     frontend_origin: str = "http://localhost:8000"
     max_body_bytes: int = 32 * 1024          # corpo máximo de requisição
