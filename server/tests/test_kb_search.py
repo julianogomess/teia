@@ -91,3 +91,36 @@ def test_sem_resultado(db, seed):
     _add_doc(db, org.id, "a.md", ["conteúdo qualquer"], embed=False)
     assert search_chunks(db, org.id, "zzz inexistente") == []
     assert search_chunks(db, org.id, "de a o") == []  # só stopwords
+
+
+# ------------------------------------------------------------ integração chat
+
+from .conftest import auth_headers, login  # noqa: E402
+
+
+def _chat(client, token, text):
+    return client.post("/api/chat", headers=auth_headers(token),
+                       json={"messages": [{"role": "user", "content": text}]})
+
+
+def test_chat_usa_retrieval_quando_ha_documentos(db, seed, client, fake_anthropic):
+    org = seed["ong"]
+    _add_doc(db, org.id, "orc.md", ["o orçamento anual foi aprovado"],
+             embed=False)
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    res = _chat(client, token, "como ficou o orçamento?")
+    assert res.status_code == 200
+    kb_block = fake_anthropic[0]["system"][1]
+    assert "orçamento anual" in kb_block["text"]
+    assert "orc.md" in kb_block["text"]
+    # modo retrieval: conteúdo varia por pergunta, não deve ter cache_control
+    assert "cache_control" not in kb_block
+
+
+def test_chat_sem_documentos_usa_pasta(db, seed, client, fake_anthropic):
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    res = _chat(client, token, "qual a missão de vocês?")
+    assert res.status_code == 200
+    kb_block = fake_anthropic[0]["system"][1]
+    assert "sobre.md" in kb_block["text"]  # pasta examples-ong concatenada
+    assert kb_block.get("cache_control") == {"type": "ephemeral"}

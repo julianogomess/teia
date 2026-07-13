@@ -91,7 +91,11 @@ def chat(body: ChatRequest, user: User = Depends(get_current_user),
     try:
         # histórico truncado: só as últimas N mensagens vão ao modelo
         messages = [m.model_dump() for m in body.messages[-settings.max_history_messages:]]
-        reply, usage, latency_ms = send_message(api_key, build_system_blocks(org), messages)
+        reply, usage, latency_ms = send_message(
+            api_key,
+            build_system_blocks(org, db=db, query=body.messages[-1].content),
+            messages,
+        )
     except AnthropicError as exc:
         _record(db, user, "error", latency_ms=0)
         raise HTTPException(502, f"Erro ao consultar o modelo ({exc.status}). Tente novamente.")
