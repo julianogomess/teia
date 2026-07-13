@@ -87,6 +87,32 @@ C4Component
 
 ---
 
+## Fluxo da base de conhecimento indexada (servidor v1, fase 1)
+
+```mermaid
+flowchart LR
+    subgraph Ingestão
+        UP["Admin faz upload<br/>POST /api/admin/documents<br/>(.md/.txt/.pdf ou .zip)"] --> REG["registro + original em<br/>uploads/&lt;org&gt;/&lt;hash&gt;"]
+        REG --> FILA[("fila ingest_jobs<br/>(no próprio banco)")]
+        FILA --> WK["worker (thread)"]
+        WK --> EXT["extração de texto<br/>(pypdf p/ PDF)"]
+        EXT --> CHK["chunking ~700 tokens"]
+        CHK --> CLS["classificação Haiku<br/>tags hierárquicas<br/>(novas ficam pendentes)"]
+        CHK --> EMB["embeddings Voyage<br/>(opcional, float32)"]
+        CLS --> DB[("documents, chunks,<br/>tags, document_tags")]
+        EMB --> DB
+    end
+    subgraph Consulta
+        Q["pergunta do usuário<br/>POST /api/chat"] --> HS["busca híbrida:<br/>termos + vetorial (RRF)<br/>+ bônus de tag"]
+        DB --> HS
+        HS --> TOPK["top-8 chunks no<br/>system prompt"]
+        TOPK --> ANT["API Anthropic"]
+    end
+```
+
+- Isolamento: toda tabela nova carrega `organization_id` e toda consulta filtra por ele.
+- Tenant sem documento indexado segue no modo original (pasta concatenada + prompt caching).
+
 ## Fluxo de uma pergunta (resumo)
 
 1. Usuário faz login (`POST /api/login`) → servidor valida e devolve um **token de sessão**.
@@ -107,7 +133,7 @@ C4Component
 | Chaves de API | Variáveis de ambiente no `.env` | Idem — cada organização aponta o **nome** da env var; a chave nunca vai ao banco | Secrets manager |
 | Separação de cobrança | 1 env var por tenant | Idem + custo estimado por tenant visível no painel | 1 workspace Anthropic por cliente — ver [context/custos-ia.md](../context/custos-ia.md) |
 | Banco de dados | Inexistente | PostgreSQL 16 via Docker Compose (SQLite em dev), migrations Alembic | — |
-| Base de conhecimento | Pastas de `.md` no repositório | Idem (pasta por organização, registrada no banco) | **Em desenvolvimento**: ingestão indexada com upload (.md/.txt/.pdf), tags hierárquicas classificadas por IA (aprovação humana) e busca híbrida full-text + vetorial — ver [design](superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md) |
+| Base de conhecimento | Pastas de `.md` no repositório | **Ingestão indexada** (fase 1): upload por admins (.md/.txt/.pdf, arquivo ou .zip), fila `ingest_jobs` + worker em thread, tags hierárquicas classificadas por IA (aprovação humana), busca híbrida termos + vetorial (RRF) que injeta só os top-8 chunks por pergunta; pastas continuam como fallback e migram com `py -m app.ingest <slug>` — ver [design](superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md) | `pgvector`/`tsvector` no Postgres (mesma interface `search_chunks()`), DOCX/OCR, reranker, UI de taxonomia |
 | Transporte | HTTP local | HTTP local + [`server/nginx.example.conf`](../server/nginx.example.conf) para produção | HTTPS atrás de proxy reverso + serviço de borda (DDoS) |
 
 Alinhado ao princípio de **soberania de dados** ([principles.md](../context/principles.md)): no desenho de produção recomendado, cada organização cliente é dona da própria conta Anthropic e dos próprios documentos — a TeIA orquestra, não centraliza.
