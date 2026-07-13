@@ -6,10 +6,13 @@ do preço de entrada — ver context/custos-ia.md.
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 
 from .config import PROJECT_ROOT
-from .models import Organization
+from .models import Document, Organization
 
 RULES = """
 REGRAS DE ESCOPO (obrigatórias):
@@ -52,13 +55,47 @@ def load_context(context_dir: str) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def build_system_blocks(org: Organization) -> List[dict]:
-    """Blocos de system prompt: regras + base de conhecimento (cacheada)."""
+def has_indexed_documents(db, org_id: int) -> bool:
+    return bool(db.scalar(
+        select(sa_func.count(Document.id)).where(
+            Document.organization_id == org_id, Document.status == "indexed"
+        )
+    ))
+
+
+def build_system_blocks(org: Organization, db=None,
+                        query: Optional[str] = None) -> List[dict]:
+    """Blocos de system prompt: regras + base de conhecimento.
+
+    Com documentos indexados, a base vira só os trechos relevantes para a
+    pergunta (busca híbrida) — rápido e barato. Sem documentos indexados,
+    mantém a pasta concatenada com cache (comportamento original).
+    """
     intro = (
         f"Você é o assistente de chat da TeIA a serviço de: {org.name}.\n"
         f"Sua base de conhecimento cobre: {org.description}.\n"
         f"{RULES}"
     )
+    if db is not None and query and has_indexed_documents(db, org.id):
+        from .kb.search import search_chunks  # tardio: evita ciclo de import
+
+        parts = []
+        for hit in search_chunks(db, org.id, query):
+            label = hit.filename + (f" · {', '.join(hit.tags)}" if hit.tags else "")
+            parts.append(f"[{label}]\n{hit.text}")
+        kb = "\n\n---\n\n".join(parts) or (
+            "Nenhum trecho da base de conhecimento casou com esta pergunta."
+        )
+        kb = (
+            "Trechos da base de conhecimento selecionados para a pergunta "
+            "atual (cada um identificado por [arquivo · tags]):\n\n" + kb
+        )
+        # sem cache_control: o conteúdo muda a cada pergunta
+        return [
+            {"type": "text", "text": intro},
+            {"type": "text",
+             "text": f"<base_de_conhecimento>\n{kb}\n</base_de_conhecimento>"},
+        ]
     kb = load_context(org.context_dir)
     return [
         {"type": "text", "text": intro},

@@ -76,37 +76,45 @@ py -m pytest tests
 Cobrem: login (senha e Google mockado), rotação/revogação de refresh token,
 controle de acesso admin × member, rate limits, cotas (diária do usuário e
 mensal do tenant), validação estrita de payload, isolamento de tenant no
-system prompt e registro de `usage_events`.
+system prompt, registro de `usage_events` e a base de conhecimento
+(extração/chunking, classificação e embeddings mockados, pipeline, busca
+híbrida, rotas admin de documentos/tags e isolamento entre tenants).
 
-## Base de conhecimento indexada (fase 1 — em desenvolvimento)
+## Base de conhecimento indexada (fase 1)
 
-Hoje o contexto de cada tenant é a pasta de `.md` inteira concatenada no
-system prompt — funciona para dezenas de arquivos, não para milhares. A
-evolução em andamento (design aprovado em
-[docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md](../docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md),
-plano em [docs/superpowers/plans/](../docs/superpowers/plans/)) troca isso por
-ingestão + busca híbrida:
+O contexto de um tenant pode crescer de dezenas para milhares de documentos —
+concatenar tudo no system prompt não escala em custo nem em latência. A fase 1
+(design em
+[docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md](../docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md))
+troca isso por ingestão + busca híbrida, implementada em [app/kb/](app/kb/):
 
-- **Upload por admins** (arquivo ou .zip; `.md`, `.txt` e `.pdf` via pypdf),
-  originais em `server/uploads/<org>/`, processamento assíncrono com fila no
-  próprio banco (`ingest_jobs`, sem Redis).
-- **Busca híbrida** por pergunta: tags filtram o escopo, full-text pega termos
-  exatos, embeddings (Voyage `voyage-3.5-lite`, 512 dims) pegam sinônimos —
-  combinados por Reciprocal Rank Fusion. Só os ~8 chunks mais relevantes vão
-  ao modelo, em vez da base inteira.
-- **Taxonomia hierárquica por tenant** (`rh.beneficios.ferias`): a IA (Haiku)
-  classifica documentos; tags novas propostas pela IA nascem pendentes e o
-  admin aprova ou rejeita.
-- **Tudo no Postgres existente** (texto, chunks, tags, embeddings como bytes) —
-  portátil para SQLite em dev/teste; `pgvector`/`tsvector` entram na fase 2
-  atrás da mesma interface `search_chunks()`.
+- **Upload por admins** — `POST /api/admin/documents` (arquivo ou .zip; `.md`,
+  `.txt` e `.pdf` via pypdf). Originais em `server/uploads/<org>/` com nome
+  pelo hash do conteúdo; mesmo hash = deduplicado, mesmo nome = substituído.
+  Processamento assíncrono com fila no próprio banco (`ingest_jobs`) e worker
+  em thread — sem Redis. `GET /api/admin/documents` lista com status
+  (`pending → processing → indexed | error`); `DELETE` remove tudo.
+- **Taxonomia hierárquica por tenant** (`rh/beneficios/ferias`): na ingestão a
+  IA (Haiku) classifica o documento dentro da árvore existente; tags novas
+  propostas pela IA nascem **pendentes** e o admin aprova ou rejeita em
+  `GET/POST /api/admin/tags` e `PATCH /api/admin/tags/{id}`.
+- **Busca híbrida** por pergunta ([app/kb/search.py](app/kb/search.py)):
+  termos exatos (SQL) + vetorial (embeddings Voyage `voyage-3.5-lite`,
+  512 dims, cosseno via numpy com cache por tenant) combinados por Reciprocal
+  Rank Fusion, com bônus quando a pergunta casa com tags aprovadas do
+  documento. O chat injeta só os ~8 chunks mais relevantes; tenants sem
+  documentos indexados continuam com a pasta concatenada (e prompt caching).
+  `GET /api/admin/kb-search?q=` permite ao admin testar o índice.
+- **Migração suave**: `py -m app.ingest <slug>` ingere a pasta `context_dir`
+  do tenant pelo mesmo pipeline.
+- **Tudo no banco existente** (texto, chunks, tags, embeddings como bytes
+  float32) — portátil entre SQLite (dev/teste) e Postgres; `pgvector` e
+  `tsvector` entram na fase 2 atrás da mesma interface `search_chunks()`.
 
-**Estado atual**: modelo de dados ([app/models.py](app/models.py):
-`documents`, `document_chunks`, `tags`, `document_tags`, `ingest_jobs`),
-migration Alembic e configuração ([app/config.py](app/config.py), seção
-"base de conhecimento") prontos; pipeline de ingestão, classificação e busca
-em implementação em [app/kb/](app/kb/). Requer `VOYAGE_API_KEY` no `.env`
-(sem prefixo, como as chaves da Anthropic — nunca vai ao banco).
+`VOYAGE_API_KEY` no `.env` é **opcional** (sem prefixo, como as chaves da
+Anthropic — nunca vai ao banco): sem ela a ingestão pula embeddings e a busca
+funciona só com termos + tags. Custo de referência: classificação ~US$1 por
+milhar de documentos (Haiku); embeddings ~US$0,02 por milhão de tokens.
 
 ## Arquitetura e decisões
 

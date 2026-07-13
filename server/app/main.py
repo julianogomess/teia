@@ -13,7 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from .config import SERVER_ROOT, settings
 from .database import Base, engine
-from .routers import admin, auth, chat
+from .routers import admin, auth, chat, documents
 
 logger = logging.getLogger("teia")
 
@@ -49,8 +49,11 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     """Rejeita corpos acima do limite antes de processar (mitigação de abuso)."""
 
     async def dispatch(self, request: Request, call_next):
+        limit = settings.max_body_bytes
+        if request.url.path.startswith("/api/admin/documents"):
+            limit = settings.kb_max_upload_bytes  # upload da base de conhecimento
         length = request.headers.get("Content-Length")
-        if length and length.isdigit() and int(length) > settings.max_body_bytes:
+        if length and length.isdigit() and int(length) > limit:
             return JSONResponse({"detail": "Requisição grande demais."}, status_code=413)
         return await call_next(request)
 
@@ -70,6 +73,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(documents.router)
 
 
 @app.get("/admin", include_in_schema=False)
@@ -94,6 +98,8 @@ def startup():
             "TEIA_SECRET_KEY não definida — usando chave de desenvolvimento. "
             "Defina uma chave forte no .env antes de expor o servidor."
         )
+    from .kb import worker
+    worker.start()
 
 
 # estáticos por último, para não engolir as rotas de API
