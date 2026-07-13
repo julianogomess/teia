@@ -3,10 +3,14 @@ usuários de teste e mock da chamada à Anthropic."""
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 # ambiente de teste ANTES de importar a app
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+os.environ.setdefault("TEIA_KB_WORKER_ENABLED", "false")
+os.environ.setdefault("TEIA_UPLOAD_DIR", tempfile.mkdtemp(prefix="teia-uploads-"))
+os.environ.pop("VOYAGE_API_KEY", None)  # nenhum teste chama a API real
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
@@ -47,6 +51,8 @@ def clean_state():
     login_limiter.reset()
     chat_limiter.reset()
     chat_concurrency.reset()
+    from app.kb import search as kb_search
+    kb_search.reset_cache()
     yield
 
 

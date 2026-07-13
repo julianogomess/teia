@@ -107,7 +107,7 @@ C4Component
 | Chaves de API | Variáveis de ambiente no `.env` | Idem — cada organização aponta o **nome** da env var; a chave nunca vai ao banco | Secrets manager |
 | Separação de cobrança | 1 env var por tenant | Idem + custo estimado por tenant visível no painel | 1 workspace Anthropic por cliente — ver [context/custos-ia.md](../context/custos-ia.md) |
 | Banco de dados | Inexistente | PostgreSQL 16 via Docker Compose (SQLite em dev), migrations Alembic | — |
-| Base de conhecimento | Pastas de `.md` no repositório | Idem (pasta por organização, registrada no banco) | Storage por cliente, com upload/gestão pelo próprio cliente |
+| Base de conhecimento | Pastas de `.md` no repositório | Idem (pasta por organização, registrada no banco) | **Em desenvolvimento**: ingestão indexada com upload (.md/.txt/.pdf), tags hierárquicas classificadas por IA (aprovação humana) e busca híbrida full-text + vetorial — ver [design](superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md) |
 | Transporte | HTTP local | HTTP local + [`server/nginx.example.conf`](../server/nginx.example.conf) para produção | HTTPS atrás de proxy reverso + serviço de borda (DDoS) |
 
 Alinhado ao princípio de **soberania de dados** ([principles.md](../context/principles.md)): no desenho de produção recomendado, cada organização cliente é dona da própria conta Anthropic e dos próprios documentos — a TeIA orquestra, não centraliza.

@@ -22,11 +22,14 @@ TeIA é uma organização que vem do setor de impacto (ONGs, fundações, organi
 - [`chat-research/`](chat-research/) — demo original multi-tenant (referência histórica; ver abaixo).
 - [`docs/arquitetura-c4.md`](docs/arquitetura-c4.md) — arquitetura do chat em modelo C4 (Mermaid), incluindo o desenho de separação de cobrança por cliente e a tabela demo → produção.
 - [`docs/prompt-servidor-v1.md`](docs/prompt-servidor-v1.md) — o prompt/especificação que guiou a construção do servidor v1.
+- [`docs/superpowers/specs/`](docs/superpowers/specs/) e [`docs/superpowers/plans/`](docs/superpowers/plans/) — design aprovado e plano de execução da **base de conhecimento indexada** (tags hierárquicas + busca híbrida full-text/vetorial), em desenvolvimento.
 - [`docker-compose.yml`](docker-compose.yml) — PostgreSQL 16 local para o servidor v1 (requer Docker Desktop).
 
 ## Servidor v1 (produção)
 
 A versão final do chat vive em [`server/`](server/): autenticação por e-mail/senha (argon2) **e Google** (OIDC + PKCE, apenas e-mails convidados), banco de dados com usuários/papéis/organizações, rate limiting e cotas de uso de IA (por usuário/dia e por tenant/mês, em mensagens e custo), e um **painel administrativo dinâmico** em `/admin` com uso, custo, eventos de segurança e gestão de usuários. Instruções completas em [`server/README.md`](server/README.md).
+
+Em desenvolvimento no mesmo servidor: **base de conhecimento indexada** — upload de documentos (.md/.txt/.pdf) por admins, classificação automática em taxonomia hierárquica por tenant (com aprovação humana das tags novas) e busca híbrida (tags + full-text + embeddings) para enviar ao modelo só os trechos relevantes, em vez da base inteira. Design em [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ## Chat TeIA (demo multi-tenant original)
 
