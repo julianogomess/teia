@@ -1,0 +1,17 @@
+# Servidor TeIA v1 — dependências (cada uma justificada no README)
+fastapi>=0.110,<1
+uvicorn>=0.29
+SQLAlchemy>=2.0,<3
+greenlet<3.2  # última série com wheel pronto para Python 3.9 no Windows
+alembic>=1.13
+pydantic>=2.7
+pydantic-settings>=2.2
+argon2-cffi>=23.1
+email-validator>=2.0
+PyJWT[crypto]>=2.8
+httpx>=0.27
+psycopg2-binary>=2.9
+pytest>=7.4
+pypdf>=4.0  # extracao de texto de PDF (base de conhecimento, fase 1)
+python-multipart>=0.0.9  # upload de arquivos no FastAPI
+numpy>=1.24,<2.1  # pontuacao vetorial da busca hibrida

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "teia-server",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000"],
+      "cwd": "server",
+      "port": 8000
+    }
+  ]
+}

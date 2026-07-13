@@ -18,10 +18,17 @@ TeIA é uma organização que vem do setor de impacto (ONGs, fundações, organi
 - [`context/principles.md`](context/principles.md) — guideline de decisão: princípios inegociáveis e operacionais a checar antes de qualquer entrega.
 - [`context/custos-ia.md`](context/custos-ia.md) — referência de custos: diferença entre assinatura Claude Pro e uso da API, estimativas por volume de uso.
 - [`examples-ong/`](examples-ong/) — documentos **fictícios** de uma ONG de exemplo (Instituto Raízes do Amanhã), usados como base de conhecimento do tenant ONG na demo.
-- [`chat-research/`](chat-research/) — chat web multi-tenant com a identidade da TeIA (ver abaixo).
+- [`server/`](server/) — **servidor v1 (produção)**: FastAPI + PostgreSQL/SQLite, login por senha e Google, papéis admin/member, rate limits e cotas de uso de IA, painel administrativo em `/admin`. Ver [`server/README.md`](server/README.md).
+- [`chat-research/`](chat-research/) — demo original multi-tenant (referência histórica; ver abaixo).
 - [`docs/arquitetura-c4.md`](docs/arquitetura-c4.md) — arquitetura do chat em modelo C4 (Mermaid), incluindo o desenho de separação de cobrança por cliente e a tabela demo → produção.
+- [`docs/prompt-servidor-v1.md`](docs/prompt-servidor-v1.md) — o prompt/especificação que guiou a construção do servidor v1.
+- [`docker-compose.yml`](docker-compose.yml) — PostgreSQL 16 local para o servidor v1 (requer Docker Desktop).
 
-## Chat TeIA (demo multi-tenant)
+## Servidor v1 (produção)
+
+A versão final do chat vive em [`server/`](server/): autenticação por e-mail/senha (argon2) **e Google** (OIDC + PKCE, apenas e-mails convidados), banco de dados com usuários/papéis/organizações, rate limiting e cotas de uso de IA (por usuário/dia e por tenant/mês, em mensagens e custo), e um **painel administrativo dinâmico** em `/admin` com uso, custo, eventos de segurança e gestão de usuários. Instruções completas em [`server/README.md`](server/README.md).
+
+## Chat TeIA (demo multi-tenant original)
 
 Protótipo de chat com Claude (Haiku 4.5) por trás, com autenticação: cada usuário logado conversa **apenas com a base de conhecimento do seu tenant**, e cada tenant pode ter sua própria chave de API — direcionando a cobrança para a conta/workspace daquela organização.
 

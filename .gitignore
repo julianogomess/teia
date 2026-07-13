@@ -1,4 +1,14 @@
 __pycache__/
 *.pyc
 .env
-.claude/
+# .claude/: automação compartilhada (settings, hooks, skills, agents, commands) é versionada;
+# só o que é pessoal/local fica de fora.
+.claude/settings.local.json
+.claude/*.log
+
+# servidor v1: banco SQLite de desenvolvimento e caches de teste
+server/teia.db
+server/*.db
+.pytest_cache/
+server/teia.db
+server/uploads/
