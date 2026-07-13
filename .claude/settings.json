@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py .claude/hooks/guard_secrets.py",
+            "timeout": 15,
+            "statusMessage": "Verificando segredos no comando..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py .claude/hooks/check_python.py",
+            "timeout": 30,
+            "statusMessage": "Checando sintaxe Python..."
+          }
+        ]
+      }
+    ]
+  }
+}

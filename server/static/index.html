@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Te[IA] — Chat</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500&display=swap');
+
+  :root {
+    --bg-dark: #2A1B14;
+    --bg-light: #EDE4D3;
+    --accent: #C86F52;
+    --accent-solid: #B25B3E;
+    --olive: #4A4F3A;
+    --text-on-dark: #F6EFE4;
+    --text-on-light: #2A1B14;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg-dark);
+    color: var(--text-on-dark);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body { display: flex; flex-direction: column; align-items: center; }
+
+  header {
+    width: 100%;
+    max-width: 720px;
+    padding: 28px 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(246, 239, 228, 0.12);
+  }
+
+  .logo {
+    font-family: 'Source Serif 4', serif;
+    font-size: 22px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .logo .chip {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+
+  .tagline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  main {
+    width: 100%;
+    max-width: 720px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  /* ---------- login ---------- */
+  #login {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #login .intro { border: none; text-align: center; }
+
+  #login form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(320px, 100%);
+    border: none;
+    padding: 0;
+  }
+
+  #login input {
+    background: rgba(246, 239, 228, 0.06);
+    border: 1px solid rgba(246, 239, 228, 0.2);
+    border-radius: 8px;
+    color: var(--text-on-dark);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    outline: none;
+  }
+
+  #login input:focus { border-color: var(--accent); }
+
+  #login button { padding: 12px 20px; }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(320px, 100%);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: rgba(246, 239, 228, 0.4);
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid rgba(246, 239, 228, 0.15);
+  }
+
+  .google-btn {
+    display: block;
+    width: min(320px, 100%);
+    text-align: center;
+    text-decoration: none;
+    background: var(--bg-light);
+    color: var(--text-on-light);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  #login .error {
+    color: var(--accent);
+    font-size: 13px;
+    min-height: 18px;
+    text-align: center;
+  }
+
+  /* ---------- chat ---------- */
+  #chat { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 12px;
+  }
+
+  .msg {
+    max-width: 82%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    line-height: 1.5;
+    font-size: 15px;
+    white-space: pre-wrap;
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent-solid);
+    color: var(--text-on-dark);
+    border-top-right-radius: 2px;
+  }
+
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--bg-light);
+    color: var(--text-on-light);
+    border-top-left-radius: 2px;
+    border-top: 2px solid var(--accent);
+  }
+
+  .msg .label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    margin-bottom: 4px;
+  }
+
+  .msg.pending {
+    opacity: 0.6;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+
+  .intro {
+    font-family: 'Source Serif 4', serif;
+    font-style: italic;
+    font-size: 16px;
+    color: rgba(246, 239, 228, 0.75);
+    padding: 20px 4px;
+    border-bottom: 1px solid rgba(246, 239, 228, 0.12);
+    margin-bottom: 6px;
+  }
+
+  .intro b { color: var(--accent); font-style: normal; }
+
+  form {
+    display: flex;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(246, 239, 228, 0.12);
+  }
+
+  textarea {
+    flex: 1;
+    resize: none;
+    background: rgba(246, 239, 228, 0.06);
+    border: 1px solid rgba(246, 239, 228, 0.2);
+    border-radius: 8px;
+    color: var(--text-on-dark);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    height: 46px;
+    outline: none;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+
+  button {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    border: none;
+    border-radius: 8px;
+    padding: 0 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  footer {
+    width: 100%;
+    max-width: 720px;
+    padding: 10px 20px 20px;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(246, 239, 228, 0.4);
+  }
+
+  footer a { color: rgba(246, 239, 228, 0.4); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+  #tenant-label { color: var(--accent); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Te<span class="chip">IA</span></div>
+  <div class="tagline">Inteligência Artificial para Impacto</div>
+</header>
+
+<main>
+  <!-- tela de login -->
+  <section id="login">
+    <div class="intro">Propósito é a nossa <b>arquitetura</b>.<br/>Entre para conversar com a sua base de conhecimento.</div>
+    <form id="login-form">
+      <input id="email" type="email" placeholder="E-mail" autocomplete="username" autofocus />
+      <input id="password" type="password" placeholder="Senha" autocomplete="current-password" />
+      <button type="submit" id="login-btn">Entrar</button>
+    </form>
+    <div class="divider">ou</div>
+    <a class="google-btn" href="/api/auth/google/login">Entrar com Google</a>
+    <div class="error" id="login-error"></div>
+  </section>
+
+  <!-- chat (escondido até logar) -->
+  <section id="chat" class="hidden">
+    <div class="intro" id="chat-intro"></div>
+    <div id="log"></div>
+    <form id="form">
+      <textarea id="input" placeholder="Digite sua pergunta..."></textarea>
+      <button id="send" type="submit">Enviar</button>
+    </form>
+  </section>
+</main>
+
+<footer>
+  <span>TEIA · CHAT <span id="tenant-label"></span></span>
+  <span>
+    <a id="admin-link" class="hidden" href="/admin">Painel</a>
+    <a id="logout-link" class="hidden" href="#">· Sair</a>
+  </span>
+</footer>
+
+<script>
+  const loginSection = document.getElementById('login');
+  const loginForm = document.getElementById('login-form');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
+  const chatSection = document.getElementById('chat');
+  const chatIntro = document.getElementById('chat-intro');
+  const tenantLabel = document.getElementById('tenant-label');
+  const adminLink = document.getElementById('admin-link');
+  const logoutLink = document.getElementById('logout-link');
+  const log = document.getElementById('log');
+  const form = document.getElementById('form');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('send');
+
+  let token = null;
+  let currentUser = null;
+  const history = [];
+
+  async function tryRefresh() {
+    try {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (!res.ok) return false;
+      const data = await res.json();
+      token = data.access_token;
+      currentUser = data.user;
+      return true;
+    } catch { return false; }
+  }
+
+  // fetch com renovação automática do token de acesso (expira em 15 min)
+  async function api(path, opts = {}, retry = true) {
+    opts.headers = Object.assign({}, opts.headers, token ? { 'Authorization': 'Bearer ' + token } : {});
+    const res = await fetch(path, opts);
+    if (res.status === 401 && retry && await tryRefresh()) {
+      return api(path, opts, false);
+    }
+    return res;
+  }
+
+  function enterChat() {
+    tenantLabel.textContent = '· ' + currentUser.org_label.toUpperCase();
+    const intro = document.createElement('span');
+    intro.textContent = 'Você está conversando com a base de conhecimento de ';
+    const b = document.createElement('b');
+    b.textContent = currentUser.org_label;
+    chatIntro.replaceChildren(intro, b, document.createTextNode('.'));
+    if (currentUser.role === 'admin') adminLink.classList.remove('hidden');
+    logoutLink.classList.remove('hidden');
+    loginSection.classList.add('hidden');
+    chatSection.classList.remove('hidden');
+    input.focus();
+  }
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginBtn.disabled = true;
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        loginError.textContent = data.detail || 'Falha no login.';
+        return;
+      }
+      token = data.access_token;
+      currentUser = data.user;
+      enterChat();
+    } catch (err) {
+      loginError.textContent = 'Erro de conexão: ' + err.message;
+    } finally {
+      loginBtn.disabled = false;
+    }
+  });
+
+  logoutLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/';
+  });
+
+  function addMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = role === 'user' ? 'Você' : 'Te[IA]';
+    div.appendChild(label);
+    const body = document.createElement('span');
+    body.textContent = text;
+    div.appendChild(body);
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage('user', text);
+    history.push({ role: 'user', content: text });
+    input.value = '';
+    sendBtn.disabled = true;
+
+    const pending = document.createElement('div');
+    pending.className = 'msg assistant pending';
+    pending.textContent = 'tecendo resposta...';
+    log.appendChild(pending);
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const res = await api('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history }),
+      });
+      const data = await res.json();
+      pending.remove();
+
+      if (res.status === 401) {
+        addMessage('assistant', data.detail || 'Sessão expirada.');
+        chatSection.classList.add('hidden');
+        loginSection.classList.remove('hidden');
+      } else if (!res.ok) {
+        addMessage('assistant', `Erro: ${data.detail || 'falha inesperada.'}`);
+      } else {
+        addMessage('assistant', data.reply);
+        history.push({ role: 'assistant', content: data.reply });
+      }
+    } catch (err) {
+      pending.remove();
+      addMessage('assistant', `Erro de conexão: ${err.message}`);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  // mensagens de erro vindas do fluxo do Google (?error=...)
+  const params = new URLSearchParams(location.search);
+  if (params.get('error') === 'nao_convidado') {
+    loginError.textContent = 'Este e-mail ainda não foi convidado. Fale com um administrador.';
+  } else if (params.get('error') === 'google') {
+    loginError.textContent = 'Não foi possível entrar com o Google. Tente novamente.';
+  }
+
+  // retoma a sessão se houver refresh token válido no cookie
+  tryRefresh().then((ok) => { if (ok) enterChat(); });
+</script>
+
+</body>
+</html>

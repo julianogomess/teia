@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Te[IA] — Painel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500&display=swap');
+
+  :root {
+    --bg-dark: #2A1B14;
+    --bg-light: #EDE4D3;
+    --accent: #C86F52;
+    --accent-solid: #B25B3E;
+    --text-on-dark: #F6EFE4;
+    --text-on-light: #2A1B14;
+    --ink: #F6EFE4;
+    --ink-2: rgba(246, 239, 228, 0.65);
+    --ink-3: rgba(246, 239, 228, 0.4);
+    --line: rgba(246, 239, 228, 0.12);
+    --card: rgba(246, 239, 228, 0.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg-dark);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0 16px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 24px;
+  }
+
+  .logo {
+    font-family: 'Source Serif 4', serif;
+    font-size: 22px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .logo .chip {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 15px;
+  }
+
+  .mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 16px; color: var(--ink-3); }
+  .header-right a { color: var(--ink-3); text-decoration: none; }
+  .header-right a:hover { color: var(--accent); }
+
+  h2 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    font-size: 18px;
+    margin: 32px 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  h2 .num {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .sub { color: var(--ink-3); margin: 0 0 14px; font-size: 12px; }
+
+  /* cartões */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+
+  .card {
+    background: var(--card);
+    border-top: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .card .k { color: var(--ink-3); }
+  .card .v {
+    font-family: 'Source Serif 4', serif;
+    font-size: 26px;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .card .d { color: var(--ink-2); font-size: 11px; margin-top: 2px; }
+
+  /* tabelas */
+  .tablebox { overflow-x: auto; background: var(--card); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+  td.strong { color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* barra de cota */
+  .quota { display: flex; align-items: center; gap: 8px; min-width: 160px; }
+  .track { flex: 1; height: 8px; border-radius: 4px; background: rgba(246, 239, 228, 0.1); overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .fill.over { background: var(--accent-solid); }
+  .quota .pct { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-2); min-width: 74px; text-align: right; }
+  .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 6px;
+  }
+
+  /* gráfico */
+  .chart-card { background: var(--card); border-radius: 8px; padding: 16px; position: relative; }
+  .bar { fill: var(--accent); }
+  .bar:hover { fill: #D98A6E; }
+  .axis-label { fill: var(--ink-3); font-family: 'IBM Plex Mono', monospace; font-size: 9px; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  #tooltip {
+    position: fixed;
+    display: none;
+    background: var(--bg-light);
+    color: var(--text-on-light);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  }
+  #tooltip .t { font-family: 'IBM Plex Mono', monospace; font-size: 10px; opacity: 0.7; }
+
+  /* formulários */
+  input, select {
+    background: rgba(246, 239, 228, 0.06);
+    border: 1px solid rgba(246, 239, 228, 0.2);
+    border-radius: 6px;
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  select option { background: var(--bg-dark); }
+
+  button {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-solid); }
+  button.ghost {
+    background: transparent;
+    border: 1px solid rgba(246, 239, 228, 0.25);
+    color: var(--ink-2);
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+  button.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+
+  .invite { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+  .flash { min-height: 18px; font-size: 12px; color: var(--accent); margin: 6px 0; }
+
+  .mini-input { width: 80px; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+
+  #restricted, #loading { text-align: center; padding: 80px 20px; }
+  #restricted .big, #loading .big {
+    font-family: 'Source Serif 4', serif;
+    font-style: italic;
+    font-size: 20px;
+    color: var(--ink-2);
+  }
+  .hidden { display: none !important; }
+  .ok-dot, .fail-dot { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; }
+  .ok-dot { color: var(--bg-light); }
+  .fail-dot { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Te<span class="chip">IA</span></div>
+    <div class="header-right mono">
+      <span>Painel · Administração</span>
+      <span id="updated-at"></span>
+      <a href="/">Chat</a>
+      <a href="#" id="logout">Sair</a>
+    </div>
+  </header>
+
+  <div id="loading"><div class="big">abrindo o painel...</div></div>
+
+  <div id="restricted" class="hidden">
+    <div class="big">Acesso restrito a administradores.</div>
+    <p class="sub"><a href="/" style="color: var(--accent)">Voltar ao chat</a></p>
+  </div>
+
+  <div id="panel" class="hidden">
+
+    <h2><span class="num">01</span> Visão geral</h2>
+    <p class="sub">Uso, custo e saúde do serviço. Atualiza sozinho a cada 10 segundos.</p>
+    <div class="cards" id="cards"></div>
+
+    <h2><span class="num">02</span> Mensagens por dia</h2>
+    <p class="sub" id="chart-sub">Últimos 14 dias, todas as organizações.</p>
+    <div class="chart-card"><svg id="chart" width="100%" height="180" role="img" aria-label="Mensagens por dia"></svg></div>
+
+    <h2><span class="num">03</span> Uso por organização</h2>
+    <p class="sub">Consumo do mês contra as cotas. Edite os limites diretamente na tabela.</p>
+    <div class="tablebox">
+      <table id="org-table">
+        <thead><tr>
+          <th>Organização</th><th>Mensagens no mês</th><th>Custo no mês</th><th>Limites (msgs · US$)</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="split">
+      <div>
+        <h2><span class="num">04</span> Top usuários do mês</h2>
+        <p class="sub">Quem mais consome — e quão perto está da cota diária.</p>
+        <div class="tablebox">
+          <table id="top-table">
+            <thead><tr><th>Usuário</th><th class="num">Msgs mês</th><th class="num">US$ mês</th><th>Hoje / cota</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h2><span class="num">05</span> Segurança</h2>
+        <p class="sub">Últimas 24 horas.</p>
+        <div class="cards" id="sec-cards" style="grid-template-columns: repeat(3, 1fr);"></div>
+        <div class="tablebox" style="margin-top: 12px;">
+          <table id="auth-table">
+            <thead><tr><th>Quando</th><th>E-mail</th><th>IP</th><th>Método</th><th>Resultado</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h2><span class="num">06</span> Usuários</h2>
+    <p class="sub">Convide por e-mail; sem senha, a pessoa só consegue entrar com o Google.</p>
+    <form class="invite" id="invite-form">
+      <input id="inv-email" type="email" placeholder="E-mail" required style="min-width: 200px;" />
+      <input id="inv-name" type="text" placeholder="Nome (opcional)" />
+      <select id="inv-org"></select>
+      <select id="inv-role">
+        <option value="member">member</option>
+        <option value="admin">admin</option>
+      </select>
+      <input id="inv-pass" type="text" placeholder="Senha (opcional, mín. 8)" />
+      <button type="submit">Convidar</button>
+    </form>
+    <div class="flash" id="flash"></div>
+    <div class="tablebox">
+      <table id="user-table">
+        <thead><tr>
+          <th>E-mail</th><th>Organização</th><th>Papel</th><th>Google</th><th>Hoje / cota</th><th>Status</th><th>Ações</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+  let token = null;
+
+  async function tryRefresh() {
+    try {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (!res.ok) return false;
+      const data = await res.json();
+      token = data.access_token;
+      return true;
+    } catch { return false; }
+  }
+
+  async function api(path, opts = {}, retry = true) {
+    opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers,
+      token ? { 'Authorization': 'Bearer ' + token } : {});
+    const res = await fetch(path, opts);
+    if (res.status === 401 && retry && await tryRefresh()) return api(path, opts, false);
+    return res;
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const usd = (v) => 'US$ ' + (v || 0).toFixed(2);
+  const tooltip = $('tooltip');
+
+  function showTip(e, html) {
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    tooltip.style.left = Math.min(e.clientX + 12, window.innerWidth - 160) + 'px';
+    tooltip.style.top = (e.clientY - 40) + 'px';
+  }
+  function hideTip() { tooltip.style.display = 'none'; }
+
+  // ---------------- cartões ----------------
+  function renderCards(m) {
+    const c = m.cards;
+    const items = [
+      ['Mensagens hoje', c.messages_today, ''],
+      ['Custo no mês', usd(c.cost_month_usd), 'estimado, todas as orgs'],
+      ['Usuários ativos hoje', c.active_users_today, ''],
+      ['Latência média', c.avg_latency_ms_24h + ' ms', 'últimas 24h'],
+      ['Taxa de erro', (c.error_rate_24h * 100).toFixed(1) + '%', 'últimas 24h'],
+      ['Bloqueios', c.blocked_24h, 'rate limit + cota, 24h'],
+    ];
+    $('cards').replaceChildren(...items.map(([k, v, d]) => {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `<div class="k mono"></div><div class="v"></div><div class="d"></div>`;
+      div.querySelector('.k').textContent = k;
+      div.querySelector('.v').textContent = v;
+      div.querySelector('.d').textContent = d;
+      return div;
+    }));
+  }
+
+  // ---------------- gráfico de barras (SVG) ----------------
+  function renderChart(series) {
+    const svg = $('chart');
+    const W = svg.clientWidth || 900, H = 180;
+    const pad = { l: 34, r: 8, t: 10, b: 22 };
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.replaceChildren();
+    const max = Math.max(1, ...series.map(d => d.messages));
+    const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    const bw = Math.max(4, iw / series.length - 4);
+    const ns = 'http://www.w3.org/2000/svg';
+
+    // linhas de grade + rótulos do eixo y (0 e máximo)
+    [0, max].forEach(v => {
+      const y = pad.t + ih - (v / max) * ih;
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', pad.l); line.setAttribute('x2', W - pad.r);
+      line.setAttribute('y1', y); line.setAttribute('y2', y);
+      line.setAttribute('class', 'gridline');
+      svg.appendChild(line);
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', pad.l - 6); label.setAttribute('y', y + 3);
+      label.setAttribute('text-anchor', 'end');
+      label.setAttribute('class', 'axis-label');
+      label.textContent = v;
+      svg.appendChild(label);
+    });
+
+    series.forEach((d, i) => {
+      const x = pad.l + (iw / series.length) * i + 2;
+      const h = (d.messages / max) * ih;
+      const rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', x);
+      rect.setAttribute('y', pad.t + ih - h);
+      rect.setAttribute('width', bw);
+      rect.setAttribute('height', Math.max(h, d.messages > 0 ? 2 : 0));
+      rect.setAttribute('rx', 3);
+      rect.setAttribute('class', 'bar');
+      rect.addEventListener('mousemove', (e) => showTip(e,
+        `<div class="t">${d.date}</div>${d.messages} mensagens · ${usd(d.cost_usd)}`));
+      rect.addEventListener('mouseleave', hideTip);
+      svg.appendChild(rect);
+      // rótulo de data a cada ~3 barras
+      if (i % 3 === 0 || i === series.length - 1) {
+        const label = document.createElementNS(ns, 'text');
+        label.setAttribute('x', x + bw / 2);
+        label.setAttribute('y', H - 6);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('class', 'axis-label');
+        label.textContent = d.date.slice(5);
+        svg.appendChild(label);
+      }
+    });
+  }
+
+  // ---------------- barra de cota ----------------
+  function quotaBar(used, limit, fmt) {
+    const pct = limit > 0 ? used / limit : 0;
+    const over = pct >= 1, warn = pct >= 0.8;
+    const wrap = document.createElement('div');
+    wrap.className = 'quota';
+    wrap.innerHTML = `<div class="track"><div class="fill${over ? ' over' : ''}"></div></div><span class="pct"></span>`;
+    wrap.querySelector('.fill').style.width = Math.min(pct * 100, 100) + '%';
+    wrap.querySelector('.pct').textContent = (fmt || ((a, b) => a + '/' + b))(used, limit);
+    if (over || warn) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = over ? 'estourou' : 'atenção';
+      wrap.appendChild(tag);
+    }
+    return wrap;
+  }
+
+  // ---------------- organizações ----------------
+  function renderOrgs(perOrg) {
+    const tbody = $('org-table').querySelector('tbody');
+    tbody.replaceChildren(...perOrg.map(o => {
+      const tr = document.createElement('tr');
+      const tdName = document.createElement('td');
+      tdName.className = 'strong';
+      tdName.textContent = o.name;
+      const tdMsgs = document.createElement('td');
+      tdMsgs.appendChild(quotaBar(o.messages_month, o.message_limit));
+      const tdCost = document.createElement('td');
+      tdCost.appendChild(quotaBar(o.cost_month_usd, o.cost_limit_usd,
+        (a, b) => a.toFixed(2) + '/' + b.toFixed(0)));
+      const tdEdit = document.createElement('td');
+      const inMsgs = document.createElement('input');
+      inMsgs.className = 'mini-input'; inMsgs.type = 'number'; inMsgs.value = o.message_limit;
+      const inCost = document.createElement('input');
+      inCost.className = 'mini-input'; inCost.type = 'number'; inCost.step = '1'; inCost.value = o.cost_limit_usd;
+      tdEdit.append(inMsgs, ' ', inCost);
+      const tdBtn = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'ghost'; btn.textContent = 'salvar';
+      btn.onclick = async () => {
+        const res = await api('/api/admin/organizations/' + o.slug, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            monthly_message_limit: parseInt(inMsgs.value || '0', 10),
+            monthly_cost_limit_usd: parseFloat(inCost.value || '0'),
+          }),
+        });
+        flash(res.ok ? `Limites de ${o.name} atualizados.` : 'Falha ao salvar limites.');
+        refreshAll();
+      };
+      tdBtn.appendChild(btn);
+      tr.append(tdName, tdMsgs, tdCost, tdEdit, tdBtn);
+      return tr;
+    }));
+  }
+
+  // ---------------- top usuários ----------------
+  function renderTop(top) {
+    const tbody = $('top-table').querySelector('tbody');
+    if (!top.length) {
+      tbody.innerHTML = '<tr><td colspan="4">Sem uso registrado neste mês.</td></tr>';
+      return;
+    }
+    tbody.replaceChildren(...top.map(u => {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td');
+      td1.className = 'strong';
+      td1.textContent = u.email;
+      const small = document.createElement('div');
+      small.style.cssText = 'font-size:11px;color:var(--ink-3)';
+      small.textContent = u.org;
+      td1.appendChild(small);
+      const td2 = document.createElement('td'); td2.className = 'num'; td2.textContent = u.messages_month;
+      const td3 = document.createElement('td'); td3.className = 'num'; td3.textContent = u.cost_month_usd.toFixed(3);
+      const td4 = document.createElement('td');
+      td4.appendChild(quotaBar(u.messages_today, u.daily_limit));
+      tr.append(td1, td2, td3, td4);
+      return tr;
+    }));
+  }
+
+  // ---------------- segurança ----------------
+  function renderSecurity(sec) {
+    const items = [
+      ['Logins falhos', sec.failed_logins_24h],
+      ['Rate limit', sec.rate_limited_24h],
+      ['Cota estourada', sec.quota_exceeded_24h],
+    ];
+    $('sec-cards').replaceChildren(...items.map(([k, v]) => {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = '<div class="k mono"></div><div class="v"></div>';
+      div.querySelector('.k').textContent = k;
+      div.querySelector('.v').textContent = v;
+      return div;
+    }));
+    const tbody = $('auth-table').querySelector('tbody');
+    if (!sec.recent_auth.length) {
+      tbody.innerHTML = '<tr><td colspan="5">Nenhum evento de login ainda.</td></tr>';
+      return;
+    }
+    tbody.replaceChildren(...sec.recent_auth.map(e => {
+      const tr = document.createElement('tr');
+      const time = new Date(e.at).toLocaleTimeString('pt-BR');
+      [[time], [e.email || '—'], [e.ip], [e.method]].forEach(([t]) => {
+        const td = document.createElement('td');
+        td.textContent = t;
+        tr.appendChild(td);
+      });
+      const td = document.createElement('td');
+      td.innerHTML = e.success
+        ? '<span class="ok-dot">✓ ok</span>'
+        : '<span class="fail-dot">✕ falha</span>';
+      if (!e.success && e.detail) td.append(' · ' + e.detail);
+      tr.appendChild(td);
+      return tr;
+    }));
+  }
+
+  // ---------------- usuários ----------------
+  function flash(msg) {
+    $('flash').textContent = msg;
+    setTimeout(() => { if ($('flash').textContent === msg) $('flash').textContent = ''; }, 5000);
+  }
+
+  async function patchUser(id, body) {
+    const res = await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      flash(d.detail || 'Falha ao atualizar usuário.');
+    }
+    loadUsers();
+  }
+
+  function ghostBtn(label, fn) {
+    const b = document.createElement('button');
+    b.className = 'ghost';
+    b.textContent = label;
+    b.onclick = fn;
+    return b;
+  }
+
+  async function loadUsers() {
+    const res = await api('/api/admin/users');
+    if (!res.ok) return;
+    const data = await res.json();
+    const tbody = $('user-table').querySelector('tbody');
+    tbody.replaceChildren(...data.users.map(u => {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td');
+      td1.className = 'strong';
+      td1.textContent = u.email;
+      if (u.name) {
+        const s = document.createElement('div');
+        s.style.cssText = 'font-size:11px;color:var(--ink-3)';
+        s.textContent = u.name;
+        td1.appendChild(s);
+      }
+      const td2 = document.createElement('td'); td2.textContent = u.org_name;
+      const td3 = document.createElement('td'); td3.textContent = u.role;
+      const td4 = document.createElement('td'); td4.textContent = u.has_google ? 'vinculado' : '—';
+      const td5 = document.createElement('td'); td5.appendChild(quotaBar(u.messages_today, u.daily_limit));
+      const td6 = document.createElement('td'); td6.textContent = u.is_active ? 'ativo' : 'bloqueado';
+      const td7 = document.createElement('td');
+      td7.append(
+        ghostBtn(u.is_active ? 'bloquear' : 'desbloquear', () => patchUser(u.id, { is_active: !u.is_active })), ' ',
+        ghostBtn(u.role === 'admin' ? 'tornar member' : 'tornar admin',
+          () => patchUser(u.id, { role: u.role === 'admin' ? 'member' : 'admin' })), ' ',
+        ghostBtn('cota diária', () => {
+          const v = prompt('Nova cota diária de mensagens para ' + u.email + ' (0 = padrão):', u.daily_limit);
+          if (v !== null) patchUser(u.id, { daily_message_limit: parseInt(v, 10) || 0 });
+        })
+      );
+      tr.append(td1, td2, td3, td4, td5, td6, td7);
+      return tr;
+    }));
+  }
+
+  $('invite-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = {
+      email: $('inv-email').value,
+      name: $('inv-name').value || null,
+      org_slug: $('inv-org').value,
+      role: $('inv-role').value,
+      password: $('inv-pass').value || null,
+    };
+    const res = await api('/api/admin/users', { method: 'POST', body: JSON.stringify(body) });
+    if (res.ok) {
+      flash('Usuário convidado: ' + body.email);
+      e.target.reset();
+      loadUsers();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      flash(typeof d.detail === 'string' ? d.detail : 'Falha ao convidar (verifique e-mail e senha).');
+    }
+  });
+
+  async function loadOrgsSelect() {
+    const res = await api('/api/admin/organizations');
+    if (!res.ok) return;
+    const data = await res.json();
+    $('inv-org').replaceChildren(...data.organizations.map(o => {
+      const opt = document.createElement('option');
+      opt.value = o.slug;
+      opt.textContent = o.name;
+      return opt;
+    }));
+  }
+
+  // ---------------- ciclo de atualização ----------------
+  async function refreshAll() {
+    const res = await api('/api/admin/metrics?days=14');
+    if (res.status === 403) {
+      $('panel').classList.add('hidden');
+      $('loading').classList.add('hidden');
+      $('restricted').classList.remove('hidden');
+      return false;
+    }
+    if (!res.ok) return true; // erro transitório: mantém o painel e tenta de novo
+    const m = await res.json();
+    renderCards(m);
+    renderChart(m.per_day);
+    renderOrgs(m.per_org);
+    renderTop(m.top_users);
+    renderSecurity(m.security);
+    $('updated-at').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    $('loading').classList.add('hidden');
+    $('restricted').classList.add('hidden');
+    $('panel').classList.remove('hidden');
+    return true;
+  }
+
+  $('logout').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/';
+  });
+
+  (async () => {
+    if (!await tryRefresh()) { location.href = '/'; return; }
+    if (await refreshAll()) {
+      loadUsers();
+      loadOrgsSelect();
+      setInterval(refreshAll, 10000);
+      setInterval(loadUsers, 30000);
+    }
+  })();
+</script>
+</body>
+</html>
