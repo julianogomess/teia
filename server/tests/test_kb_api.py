@@ -114,6 +114,20 @@ def test_tags_criar_aprovar_rejeitar(client, db, seed, ong_token):
     assert db.query(Tag).filter_by(path="rh/proposta").one().status == "approved"
 
 
+def test_ingest_folder_ingere_pasta_do_tenant(db, seed):
+    from app.ingest import ingest_folder
+
+    counts = ingest_folder(db, seed["ong"])  # examples-ong/*.md
+    db.commit()
+    assert counts["criado"] == 3
+    worker.process_pending()
+    docs = db.query(Document).filter_by(organization_id=seed["ong"].id).all()
+    assert {d.status for d in docs} == {"indexed"}
+    # rodar de novo: tudo cai em duplicado
+    counts = ingest_folder(db, seed["ong"])
+    assert counts.get("criado", 0) == 0 and counts["duplicado"] == 3
+
+
 def test_kb_search_do_admin(client, db, seed, ong_token):
     _upload(client, ong_token, "orc.md", b"o orcamento anual foi aprovado")
     worker.process_pending()
