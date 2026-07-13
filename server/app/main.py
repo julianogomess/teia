@@ -13,7 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from .config import SERVER_ROOT, settings
 from .database import Base, engine
-from .routers import admin, auth, chat
+from .routers import admin, auth, chat, documents
 
 logger = logging.getLogger("teia")
 
@@ -73,6 +73,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(documents.router)
 
 
 @app.get("/admin", include_in_schema=False)
