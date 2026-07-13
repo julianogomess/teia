@@ -110,6 +110,24 @@ def test_process_document_erro_vira_status_error(db, seed):
     assert doc.error
 
 
+def test_worker_processa_fila(db, seed, monkeypatch):
+    from app.kb import worker
+
+    from .conftest import TestingSession
+
+    monkeypatch.setattr(worker, "SessionLocal", TestingSession)
+    monkeypatch.setattr("app.kb.classify.classify_document", lambda *a, **k: [])
+    org = seed["ong"]
+    register_document(db, org, "um.md", b"conteudo um bem interessante")
+    register_document(db, org, "dois.md", b"conteudo dois diferente")
+    db.commit()
+
+    assert worker.process_pending() == 2
+    statuses = {d.filename: d.status for d in db.query(Document).all()}
+    assert statuses == {"um.md": "indexed", "dois.md": "indexed"}
+    assert {j.status for j in db.query(IngestJob).all()} == {"done"}
+
+
 def test_delete_document_limpa_tudo(db, seed, monkeypatch):
     org = seed["ong"]
     monkeypatch.setattr("app.kb.classify.classify_document", lambda *a, **k: [])
