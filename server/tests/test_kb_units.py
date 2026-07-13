@@ -54,3 +54,50 @@ def test_paragrafo_gigante_e_quebrado():
 
 def test_texto_vazio():
     assert split_chunks("   \n\n  ", max_chars=100, overlap=10) == []
+
+
+# ------------------------------------------------------------------ embeddings
+
+from app.kb.embeddings import (  # noqa: E402
+    EmbeddingError,
+    bytes_to_matrix,
+    cosine_scores,
+    embed_texts,
+    embedding_to_bytes,
+)
+
+
+def test_embedding_bytes_ida_e_volta():
+    blob = embedding_to_bytes([1.0, 0.0, 0.0])
+    matrix = bytes_to_matrix([blob, embedding_to_bytes([0.0, 1.0, 0.0])])
+    assert matrix.shape == (2, 3)
+    scores = cosine_scores(matrix, [1.0, 0.0, 0.0])
+    assert scores[0] == pytest.approx(1.0)
+    assert scores[1] == pytest.approx(0.0)
+
+
+def test_embed_texts_chama_voyage(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]}]}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured.update(json)
+        return FakeResponse()
+
+    monkeypatch.setenv("VOYAGE_API_KEY", "chave-teste")
+    monkeypatch.setattr("app.kb.embeddings.httpx.post", fake_post)
+    vecs = embed_texts(["a", "b"], "document")
+    assert vecs == [[0.1, 0.2], [0.3, 0.4]]
+    assert captured["input_type"] == "document"
+    assert captured["output_dimension"] == 512
+
+
+def test_embed_texts_sem_chave(monkeypatch):
+    monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
+    with pytest.raises(EmbeddingError):
+        embed_texts(["a"], "query")
