@@ -78,6 +78,36 @@ controle de acesso admin × member, rate limits, cotas (diária do usuário e
 mensal do tenant), validação estrita de payload, isolamento de tenant no
 system prompt e registro de `usage_events`.
 
+## Base de conhecimento indexada (fase 1 — em desenvolvimento)
+
+Hoje o contexto de cada tenant é a pasta de `.md` inteira concatenada no
+system prompt — funciona para dezenas de arquivos, não para milhares. A
+evolução em andamento (design aprovado em
+[docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md](../docs/superpowers/specs/2026-07-12-base-conhecimento-indexada-design.md),
+plano em [docs/superpowers/plans/](../docs/superpowers/plans/)) troca isso por
+ingestão + busca híbrida:
+
+- **Upload por admins** (arquivo ou .zip; `.md`, `.txt` e `.pdf` via pypdf),
+  originais em `server/uploads/<org>/`, processamento assíncrono com fila no
+  próprio banco (`ingest_jobs`, sem Redis).
+- **Busca híbrida** por pergunta: tags filtram o escopo, full-text pega termos
+  exatos, embeddings (Voyage `voyage-3.5-lite`, 512 dims) pegam sinônimos —
+  combinados por Reciprocal Rank Fusion. Só os ~8 chunks mais relevantes vão
+  ao modelo, em vez da base inteira.
+- **Taxonomia hierárquica por tenant** (`rh.beneficios.ferias`): a IA (Haiku)
+  classifica documentos; tags novas propostas pela IA nascem pendentes e o
+  admin aprova ou rejeita.
+- **Tudo no Postgres existente** (texto, chunks, tags, embeddings como bytes) —
+  portátil para SQLite em dev/teste; `pgvector`/`tsvector` entram na fase 2
+  atrás da mesma interface `search_chunks()`.
+
+**Estado atual**: modelo de dados ([app/models.py](app/models.py):
+`documents`, `document_chunks`, `tags`, `document_tags`, `ingest_jobs`),
+migration Alembic e configuração ([app/config.py](app/config.py), seção
+"base de conhecimento") prontos; pipeline de ingestão, classificação e busca
+em implementação em [app/kb/](app/kb/). Requer `VOYAGE_API_KEY` no `.env`
+(sem prefixo, como as chaves da Anthropic — nunca vai ao banco).
+
 ## Arquitetura e decisões
 
 - **FastAPI + SQLAlchemy 2 + Alembic.** Endpoints síncronos (o proxy à
@@ -110,9 +140,12 @@ system prompt e registro de `usage_events`.
 | pydantic / pydantic-settings / email-validator | validação estrita de payloads e configuração via env |
 | argon2-cffi | hash de senha (recomendação OWASP) |
 | PyJWT[crypto] | JWT de acesso + verificação do id_token do Google (RS256/JWKS) |
-| httpx | chamadas à Anthropic e ao Google com timeout |
+| httpx | chamadas à Anthropic, ao Google e à Voyage com timeout |
 | psycopg2-binary | driver PostgreSQL |
 | pytest | testes |
+| pypdf | extração de texto de PDF (base de conhecimento, fase 1) |
+| python-multipart | upload de arquivos no FastAPI |
+| numpy | pontuação vetorial da busca híbrida (produto escalar sobre embeddings) |
 
 ### Cotas e limites — onde ajustar
 
