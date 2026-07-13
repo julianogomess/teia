@@ -58,19 +58,21 @@ classificá-los e indexá-los para que a consulta seja rápida e econômica.
 
 ### Portabilidade Postgres/SQLite
 
-O servidor roda com SQLite em dev/teste e Postgres em produção. A camada de
-busca detecta o dialeto:
+O servidor roda com SQLite em dev/teste e Postgres em produção. Fase 1 usa
+um único motor portátil, dentro da escala alvo (milhares de documentos):
 
-- **Postgres:** `tsvector` (config `portuguese`) com índice GIN para
-  full-text; extensão `pgvector` com índice HNSW para vetores (quando a
-  extensão existir; senão, fallback abaixo).
-- **SQLite (e fallback):** full-text por casamento de termos em SQL `LIKE`;
-  embeddings guardados como bytes (float32) e similaridade calculada em
-  Python sobre o conjunto candidato já filtrado por tags/full-text (centenas
-  de chunks — milissegundos).
+- **Termos exatos:** casamento por `LIKE` em SQL, sempre filtrado por
+  `organization_id` (indexado).
+- **Vetorial:** embeddings guardados como bytes (float32); similaridade por
+  produto escalar com numpy sobre a matriz do tenant, cacheada em memória e
+  invalidada a cada ingestão/remoção (dezenas de milhares de chunks →
+  milissegundos).
+- **Tags:** bônus de relevância quando termos da pergunta casam com tags
+  aprovadas do documento.
 
 A interface pública é uma só (`search_chunks(db, org, query, top_k)`);
-trocar o motor não mexe em quem consome.
+`tsvector`+GIN e `pgvector`+HNSW entram na fase 2 atrás da mesma interface,
+sem mexer em quem consome.
 
 ### Pipeline de ingestão
 
@@ -122,7 +124,9 @@ os tenants existentes. O bloco de regras continua com cache.
 
 DOCX/OCR, reranker, UI de gestão de taxonomia (começa via API), S3 para
 originais, RLS no Postgres, atualização incremental de documento (v1:
-re-upload substitui pelo hash).
+re-upload substitui pelo hash), índices `tsvector`/GIN e `pgvector`/HNSW no
+Postgres (a interface de busca já isola essa troca), contabilização do custo
+de ingestão em `usage_events`.
 
 ## Testes
 
