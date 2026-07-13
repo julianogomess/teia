@@ -101,3 +101,34 @@ def test_embed_texts_sem_chave(monkeypatch):
     monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
     with pytest.raises(EmbeddingError):
         embed_texts(["a"], "query")
+
+
+# --------------------------------------------------------------- classificação
+
+from app.kb.classify import classify_document, normalize_path  # noqa: E402
+
+
+def test_normaliza_caminhos_de_tag():
+    assert normalize_path(" RH / Benefícios / Férias ") == "rh/benefícios/férias"
+    assert normalize_path("a//b") == "a/b"
+    assert normalize_path("a/b/c/d/e") == "a/b/c/d"  # profundidade máxima 4
+    assert normalize_path("///") is None
+    assert normalize_path("x" * 300) is None
+
+
+def test_classifica_documento(monkeypatch):
+    def fake_send(api_key, system_blocks, messages, model=None):
+        return ('["rh/beneficios/ferias", "RH/Contratos", "///"]',
+                {"input_tokens": 10}, 5)
+
+    monkeypatch.setattr("app.kb.classify.send_message", fake_send)
+    tags = classify_document("chave", ["rh/beneficios"], "ferias.md", "texto")
+    assert tags == ["rh/beneficios/ferias", "rh/contratos"]
+
+
+def test_classificacao_resposta_invalida(monkeypatch):
+    def fake_send(api_key, system_blocks, messages, model=None):
+        return ("não sei classificar", {}, 5)
+
+    monkeypatch.setattr("app.kb.classify.send_message", fake_send)
+    assert classify_document("chave", [], "a.md", "texto") == []
