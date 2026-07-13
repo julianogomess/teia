@@ -12,3 +12,6 @@ PyJWT[crypto]>=2.8
 httpx>=0.27
 psycopg2-binary>=2.9
 pytest>=7.4
+pypdf>=4.0  # extracao de texto de PDF (base de conhecimento, fase 1)
+python-multipart>=0.0.9  # upload de arquivos no FastAPI
+numpy>=1.24,<2.1  # pontuacao vetorial da busca hibrida
