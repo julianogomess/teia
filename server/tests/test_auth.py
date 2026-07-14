@@ -16,7 +16,7 @@ def test_login_ok(client, seed):
     assert res.status_code == 200
     data = res.json()
     assert data["access_token"]
-    assert data["user"]["role"] == "admin"
+    assert data["user"]["role"] == "superadmin"
     assert data["user"]["org_label"] == "TeIA"
     assert "teia_refresh" in res.cookies
 

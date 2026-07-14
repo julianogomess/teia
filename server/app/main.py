@@ -5,13 +5,13 @@ Rodar:  uvicorn app.main:app --port 8000  (a partir da pasta server/)
 
 import logging
 
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from .config import SERVER_ROOT, settings
+from .config import DEV_SECRET_KEY, SERVER_ROOT, settings
 from .database import Base, engine
 from .routers import admin, auth, chat, documents
 
@@ -45,17 +45,76 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Rejeita corpos acima do limite antes de processar (mitigação de abuso)."""
+def _body_limit_for(path: str) -> int:
+    if path.startswith("/api/admin/documents"):
+        return settings.kb_max_upload_bytes  # upload da base de conhecimento
+    return settings.max_body_bytes
 
-    async def dispatch(self, request: Request, call_next):
-        limit = settings.max_body_bytes
-        if request.url.path.startswith("/api/admin/documents"):
-            limit = settings.kb_max_upload_bytes  # upload da base de conhecimento
-        length = request.headers.get("Content-Length")
-        if length and length.isdigit() and int(length) > limit:
-            return JSONResponse({"detail": "Requisição grande demais."}, status_code=413)
-        return await call_next(request)
+
+class BodySizeLimitMiddleware:
+    """Rejeita corpos acima do limite antes de processar (mitigação de abuso).
+
+    Middleware ASGI puro: além do atalho por Content-Length, conta os bytes
+    de fato recebidos e responde 413 antes de repassar o corpo à aplicação.
+    Assim um cliente que omite Content-Length (ex.: Transfer-Encoding:
+    chunked) ou mente no header não escapa do teto — a memória fica limitada
+    ao próprio limite. O corpo lido é bufferizado e reenviado à aplicação.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        limit = _body_limit_for(scope.get("path", ""))
+
+        # atalho: rejeita já pelo Content-Length declarado, sem bufferizar
+        for name, value in scope.get("headers", []):
+            if name == b"content-length" and value.isdigit() and int(value) > limit:
+                await self._reject(send)
+                return
+
+        body = bytearray()
+        trailing = None
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                trailing = message
+                break
+            body.extend(message.get("body", b""))
+            if len(body) > limit:
+                await self._reject(send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": bytes(body),
+                        "more_body": False}
+            if trailing is not None:
+                return trailing
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    async def _reject(self, send) -> None:
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [(b"content-type", b"application/json"),
+                        (b"x-content-type-options", b"nosniff")],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b'{"detail":"Requisi\\u00e7\\u00e3o grande demais."}',
+        })
 
 
 app = FastAPI(title="TeIA Chat", docs_url=None, redoc_url=None)
@@ -89,14 +148,47 @@ def healthz():
     return {"ok": True}
 
 
+def validate_production_config() -> None:
+    """Em produção, recusa subir com configuração insegura. Fora de produção,
+    só emite avisos — a conveniência de dev continua intacta."""
+    problems = []
+    if settings.secret_key == DEV_SECRET_KEY:
+        problems.append(
+            "TEIA_SECRET_KEY não definida — a chave de desenvolvimento é pública "
+            "e permitiria forjar sessões de admin."
+        )
+    if not settings.cookie_secure:
+        problems.append(
+            "TEIA_COOKIE_SECURE deve ser true em produção (cookie de sessão só "
+            "sobre HTTPS)."
+        )
+    if "localhost" in settings.frontend_origin or "127.0.0.1" in settings.frontend_origin:
+        problems.append(
+            f"TEIA_FRONTEND_ORIGIN aponta para localhost ({settings.frontend_origin}); "
+            "defina o domínio público real (CORS/cookies dependem dele)."
+        )
+
+    if not settings.is_production:
+        for msg in problems:
+            logger.warning(msg)
+        return
+    if problems:
+        raise RuntimeError(
+            "Configuração de produção insegura — o servidor não vai subir:\n  - "
+            + "\n  - ".join(problems)
+        )
+
+
 @app.on_event("startup")
 def startup():
-    if settings.auto_create_tables:
+    validate_production_config()
+    # Auto-criar tabelas é conveniência de dev/SQLite. Em produção o schema
+    # vem de `alembic upgrade head` — nunca deste atalho (evita drift).
+    if settings.auto_create_tables and not settings.is_production:
         Base.metadata.create_all(engine)
-    if settings.secret_key == "dev-secret-inseguro-trocar-antes-de-expor":
+    elif settings.auto_create_tables and settings.is_production:
         logger.warning(
-            "TEIA_SECRET_KEY não definida — usando chave de desenvolvimento. "
-            "Defina uma chave forte no .env antes de expor o servidor."
+            "auto_create_tables ignorado em produção; rode `alembic upgrade head`."
         )
     from .kb import worker
     worker.start()

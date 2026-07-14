@@ -24,17 +24,45 @@ from ..models import Document, DocumentTag, Tag, User
 router = APIRouter(prefix="/api/admin", tags=["base-de-conhecimento"])
 
 MAX_ZIP_ENTRIES = 500
+# Teto de bytes DESCOMPRIMIDOS por lote: barra zip bombs (poucos MB comprimidos
+# que explodem em GB). Contado durante a leitura, sem confiar no file_size do
+# cabeçalho, que é falsificável.
+MAX_ZIP_UNCOMPRESSED = 200 * 1024 * 1024
+_ZIP_READ_CHUNK = 1 << 16
+
+
+class ZipLimitExceeded(Exception):
+    """Conteúdo descomprimido do zip passou do teto (possível zip bomb)."""
+
+
+def _read_entry_capped(zf: zipfile.ZipFile, info: zipfile.ZipInfo,
+                       remaining: int) -> bytes:
+    """Lê uma entrada em blocos, abortando se estourar o orçamento restante."""
+    out = io.BytesIO()
+    with zf.open(info) as stream:
+        while True:
+            chunk = stream.read(_ZIP_READ_CHUNK)
+            if not chunk:
+                break
+            out.write(chunk)
+            if out.tell() > remaining:
+                raise ZipLimitExceeded()
+    return out.getvalue()
 
 
 def _zip_entries(data: bytes) -> List[Tuple[str, bytes]]:
     """Expande um .zip em memória (nome, bytes); nada é escrito no disco
-    com o caminho do zip, então zip-slip não se aplica."""
+    com o caminho do zip, então zip-slip não se aplica. Levanta
+    ZipLimitExceeded se o total descomprimido passar de MAX_ZIP_UNCOMPRESSED."""
     entries: List[Tuple[str, bytes]] = []
+    total = 0
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for info in zf.infolist()[:MAX_ZIP_ENTRIES]:
             if info.is_dir():
                 continue
-            entries.append((info.filename, zf.read(info)))
+            payload = _read_entry_capped(zf, info, MAX_ZIP_UNCOMPRESSED - total)
+            total += len(payload)
+            entries.append((info.filename, payload))
     return entries
 
 
@@ -52,6 +80,9 @@ async def upload_documents(files: List[UploadFile] = File(...),
                 entries = _zip_entries(data)
             except zipfile.BadZipFile:
                 skipped.append({"filename": name, "reason": "zip-invalido"})
+                continue
+            except ZipLimitExceeded:
+                skipped.append({"filename": name, "reason": "zip-grande-demais"})
                 continue
         else:
             entries = [(name, data)]

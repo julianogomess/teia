@@ -63,7 +63,7 @@ def main() -> None:
                 User(
                     email=admin_email,
                     name="Administração TeIA",
-                    role="admin",
+                    role="superadmin",  # equipe TeIA: visão e gestão globais
                     organization_id=orgs["teia"].id,
                     password_hash=hash_password(password),
                 )

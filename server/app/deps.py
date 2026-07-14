@@ -30,6 +30,15 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != "admin":
+    """Admin do tenant OU superadmin. As rotas que usam esta dependência devem
+    escopar seus dados pela organização do usuário (superadmin vê tudo)."""
+    if user.role not in ("admin", "superadmin"):
         raise HTTPException(403, "Acesso restrito a administradores.")
+    return user
+
+
+def require_superadmin(user: User = Depends(get_current_user)) -> User:
+    """Só a equipe TeIA: rotas de gestão global (cotas de tenants etc.)."""
+    if user.role != "superadmin":
+        raise HTTPException(403, "Acesso restrito à administração da TeIA.")
     return user

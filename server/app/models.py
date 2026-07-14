@@ -34,7 +34,10 @@ from .database import Base
 
 # Papéis disponíveis. Para adicionar um papel novo basta incluí-lo aqui e
 # tratar suas permissões em deps.py — sem migração estrutural.
-ROLES = ("admin", "member")
+#   superadmin -> equipe TeIA: visão e gestão globais (todos os tenants)
+#   admin      -> gestor de um tenant: só a própria organização
+#   member     -> usuário comum do chat, sem acesso ao painel
+ROLES = ("superadmin", "admin", "member")
 
 
 class Organization(Base):

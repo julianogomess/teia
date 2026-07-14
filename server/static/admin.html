@@ -317,6 +317,8 @@
 
 <script>
   let token = null;
+  let currentUser = null;
+  const isSuperadmin = () => currentUser && currentUser.role === 'superadmin';
 
   async function tryRefresh() {
     try {
@@ -324,6 +326,7 @@
       if (!res.ok) return false;
       const data = await res.json();
       token = data.access_token;
+      currentUser = data.user;
       return true;
     } catch { return false; }
   }
@@ -457,26 +460,29 @@
       tdCost.appendChild(quotaBar(o.cost_month_usd, o.cost_limit_usd,
         (a, b) => a.toFixed(2) + '/' + b.toFixed(0)));
       const tdEdit = document.createElement('td');
-      const inMsgs = document.createElement('input');
-      inMsgs.className = 'mini-input'; inMsgs.type = 'number'; inMsgs.value = o.message_limit;
-      const inCost = document.createElement('input');
-      inCost.className = 'mini-input'; inCost.type = 'number'; inCost.step = '1'; inCost.value = o.cost_limit_usd;
-      tdEdit.append(inMsgs, ' ', inCost);
       const tdBtn = document.createElement('td');
-      const btn = document.createElement('button');
-      btn.className = 'ghost'; btn.textContent = 'salvar';
-      btn.onclick = async () => {
-        const res = await api('/api/admin/organizations/' + o.slug, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            monthly_message_limit: parseInt(inMsgs.value || '0', 10),
-            monthly_cost_limit_usd: parseFloat(inCost.value || '0'),
-          }),
-        });
-        flash(res.ok ? `Limites de ${o.name} atualizados.` : 'Falha ao salvar limites.');
-        refreshAll();
-      };
-      tdBtn.appendChild(btn);
+      // edição de cotas é controle de cobrança da TeIA: só superadmin
+      if (isSuperadmin()) {
+        const inMsgs = document.createElement('input');
+        inMsgs.className = 'mini-input'; inMsgs.type = 'number'; inMsgs.value = o.message_limit;
+        const inCost = document.createElement('input');
+        inCost.className = 'mini-input'; inCost.type = 'number'; inCost.step = '1'; inCost.value = o.cost_limit_usd;
+        tdEdit.append(inMsgs, ' ', inCost);
+        const btn = document.createElement('button');
+        btn.className = 'ghost'; btn.textContent = 'salvar';
+        btn.onclick = async () => {
+          const res = await api('/api/admin/organizations/' + o.slug, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              monthly_message_limit: parseInt(inMsgs.value || '0', 10),
+              monthly_cost_limit_usd: parseFloat(inCost.value || '0'),
+            }),
+          });
+          flash(res.ok ? `Limites de ${o.name} atualizados.` : 'Falha ao salvar limites.');
+          refreshAll();
+        };
+        tdBtn.appendChild(btn);
+      }
       tr.append(tdName, tdMsgs, tdCost, tdEdit, tdBtn);
       return tr;
     }));
