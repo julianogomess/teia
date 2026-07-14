@@ -65,7 +65,8 @@ def db():
 
 @pytest.fixture()
 def seed(db):
-    """Duas orgs (teia, ong), um admin (teia) e um member (ong)."""
+    """Duas orgs (teia, ong), um superadmin (teia), um admin do tenant e um
+    member (ambos da ong)."""
     teia = Organization(
         slug="teia", name="TeIA", description="docs da TeIA",
         context_dir="context", api_key_env="ANTHROPIC_API_KEY_TEIA",
@@ -77,16 +78,21 @@ def seed(db):
     db.add_all([teia, ong])
     db.flush()
     admin = User(
-        email="admin@teia.org.br", role="admin", organization_id=teia.id,
+        email="admin@teia.org.br", role="superadmin", organization_id=teia.id,
         password_hash=hash_password("senha-admin-123"),
+    )
+    ong_admin = User(
+        email="gestora@raizes.org.br", role="admin", organization_id=ong.id,
+        password_hash=hash_password("senha-gestora-123"),
     )
     member = User(
         email="maria@raizes.org.br", role="member", organization_id=ong.id,
         password_hash=hash_password("senha-maria-123"),
     )
-    db.add_all([admin, member])
+    db.add_all([admin, ong_admin, member])
     db.commit()
-    return {"teia": teia, "ong": ong, "admin": admin, "member": member}
+    return {"teia": teia, "ong": ong, "admin": admin, "ong_admin": ong_admin,
+            "member": member}
 
 
 @pytest.fixture()

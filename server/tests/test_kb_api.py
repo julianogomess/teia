@@ -69,6 +69,21 @@ def test_upload_extensao_invalida(client, ong_token):
     assert res.json()["skipped"][0]["reason"] == "formato"
 
 
+def test_upload_zip_bomb_barrado(client, ong_token, monkeypatch):
+    """Zip pequeno que descomprime além do teto é pulado, não estoura a memória."""
+    from app.routers import documents
+
+    monkeypatch.setattr(documents, "MAX_ZIP_UNCOMPRESSED", 4096)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # ~1 MB de zeros comprime para poucos bytes, mas descomprime > 4 KB
+        zf.writestr("bomba.md", b"0" * (1024 * 1024))
+    res = _upload(client, ong_token, "bomba.zip", buf.getvalue())
+    assert res.status_code == 202
+    assert res.json()["created"] == []
+    assert res.json()["skipped"][0]["reason"] == "zip-grande-demais"
+
+
 def test_member_nao_acessa(client, seed):
     token = login(client, "maria@raizes.org.br", "senha-maria-123")
     res = client.get("/api/admin/documents", headers=auth_headers(token))

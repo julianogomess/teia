@@ -14,6 +14,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 SERVER_ROOT = Path(__file__).resolve().parent.parent  # server/
 PROJECT_ROOT = SERVER_ROOT.parent                     # raiz do repositório
 
+# Chave usada só em desenvolvimento. Em produção o boot recusa subir com ela
+# (ver main.py:validate_production_config) — JWTs assinados com uma chave
+# pública e conhecida seriam trivialmente forjáveis.
+DEV_SECRET_KEY = "dev-secret-inseguro-trocar-antes-de-expor"
+
 
 def load_dotenv() -> None:
     """Carrega o .env da raiz para os.environ (sem sobrescrever o ambiente)."""
@@ -35,16 +40,21 @@ load_dotenv()
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TEIA_", extra="ignore")
 
+    # --- ambiente ----------------------------------------------------------
+    # "production" ativa as travas de segurança no startup (chave forte,
+    # cookie seguro, sem auto_create_tables). Qualquer outro valor = dev.
+    environment: str = "development"
+
     # --- banco -----------------------------------------------------------
     # Padrão: SQLite local (desenvolvimento sem Docker). Com o Postgres do
     # docker-compose: postgresql+psycopg2://teia:teia-dev@localhost:5432/teia
     database_url: str = "sqlite:///" + (SERVER_ROOT / "teia.db").as_posix()
     # Cria as tabelas no startup se não existirem (conveniência de dev/SQLite).
-    # Em produção com Postgres, desligue e use `alembic upgrade head`.
+    # Em produção é ignorado: o schema vem de `alembic upgrade head`.
     auto_create_tables: bool = True
 
     # --- tokens e sessão ---------------------------------------------------
-    secret_key: str = "dev-secret-inseguro-trocar-antes-de-expor"
+    secret_key: str = DEV_SECRET_KEY
     access_token_minutes: int = 15
     refresh_token_days: int = 14
     cookie_secure: bool = False  # True em produção (HTTPS)
@@ -91,6 +101,10 @@ class Settings(BaseSettings):
     # --- seed ----------------------------------------------------------------
     admin_email: str = "admin@teia.org.br"
     admin_password: str = ""
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() == "production"
 
 
 settings = Settings()

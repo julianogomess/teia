@@ -1,7 +1,8 @@
 """Rotas administrativas: métricas do painel e gestão de usuários/cotas.
 
-Todas exigem papel 'admin' (require_admin) — a checagem é no servidor,
-o frontend só reflete o resultado.
+Escopo por tenant: 'admin' vê e gerencia apenas a própria organização;
+'superadmin' (equipe TeIA) tem visão global e é o único que edita cotas de
+organizações. A checagem é no servidor — o frontend só reflete o resultado.
 """
 
 import time
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..deps import require_admin
+from ..deps import require_admin, require_superadmin
 from ..models import ROLES, AuthEvent, Organization, UsageEvent, User
 from ..quotas import (
     month_start,
@@ -36,57 +37,79 @@ router = APIRouter(
 _PROCESS_START = time.monotonic()
 
 
+def _scope_org_id(admin: User) -> Optional[int]:
+    """None = visão global (superadmin); senão, restringe ao tenant do admin."""
+    return None if admin.role == "superadmin" else admin.organization_id
+
+
 # ------------------------------------------------------------------- métricas
 @router.get("/metrics")
-def metrics(days: int = 14, db: Session = Depends(get_db)):
+def metrics(days: int = 14, admin: User = Depends(require_admin),
+            db: Session = Depends(get_db)):
     days = max(1, min(days, 90))
     now = datetime.utcnow()
     day0 = today_start()
     last_24h = now - timedelta(hours=24)
     series_start = day0 - timedelta(days=days - 1)
 
+    org_id = _scope_org_id(admin)
+    # filtros de tenant aplicados a toda consulta quando o admin não é global
+    usage_where = [UsageEvent.organization_id == org_id] if org_id else []
+    # eventos de login não têm organization_id: filtra pelos e-mails do tenant
+    auth_where = (
+        [AuthEvent.email.in_(select(User.email).where(User.organization_id == org_id))]
+        if org_id else []
+    )
+
     # ---- cartões ----------------------------------------------------------
     messages_today = db.scalar(
         select(func.count(UsageEvent.id)).where(
-            UsageEvent.result == "ok", UsageEvent.created_at >= day0
+            UsageEvent.result == "ok", UsageEvent.created_at >= day0, *usage_where
         )
     ) or 0
     cost_month = float(
         db.scalar(
             select(func.coalesce(func.sum(UsageEvent.cost_usd), 0.0)).where(
-                UsageEvent.result == "ok", UsageEvent.created_at >= month_start()
+                UsageEvent.result == "ok",
+                UsageEvent.created_at >= month_start(),
+                *usage_where,
             )
         ) or 0.0
     )
     active_users_today = db.scalar(
         select(func.count(func.distinct(UsageEvent.user_id))).where(
-            UsageEvent.result == "ok", UsageEvent.created_at >= day0
+            UsageEvent.result == "ok", UsageEvent.created_at >= day0, *usage_where
         )
     ) or 0
     avg_latency = db.scalar(
         select(func.avg(UsageEvent.latency_ms)).where(
-            UsageEvent.result == "ok", UsageEvent.created_at >= last_24h
+            UsageEvent.result == "ok", UsageEvent.created_at >= last_24h, *usage_where
         )
     )
     total_24h = db.scalar(
-        select(func.count(UsageEvent.id)).where(UsageEvent.created_at >= last_24h)
+        select(func.count(UsageEvent.id)).where(
+            UsageEvent.created_at >= last_24h, *usage_where
+        )
     ) or 0
     errors_24h = db.scalar(
         select(func.count(UsageEvent.id)).where(
-            UsageEvent.result == "error", UsageEvent.created_at >= last_24h
+            UsageEvent.result == "error", UsageEvent.created_at >= last_24h,
+            *usage_where,
         )
     ) or 0
     blocked_24h = db.scalar(
         select(func.count(UsageEvent.id)).where(
             UsageEvent.result.in_(["rate_limited", "quota_exceeded"]),
             UsageEvent.created_at >= last_24h,
+            *usage_where,
         )
     ) or 0
 
     # ---- série por dia (agregada em Python: portável SQLite/Postgres) -----
     rows = db.execute(
         select(UsageEvent.created_at, UsageEvent.cost_usd).where(
-            UsageEvent.result == "ok", UsageEvent.created_at >= series_start
+            UsageEvent.result == "ok", UsageEvent.created_at >= series_start,
+            *usage_where,
         )
     ).all()
     per_day = {}
@@ -105,8 +128,11 @@ def metrics(days: int = 14, db: Session = Depends(get_db)):
         )
 
     # ---- uso e cota por organização ----------------------------------------
+    orgs_query = select(Organization).order_by(Organization.name)
+    if org_id:
+        orgs_query = orgs_query.where(Organization.id == org_id)
     per_org = []
-    for org in db.scalars(select(Organization).order_by(Organization.name)).all():
+    for org in db.scalars(orgs_query).all():
         per_org.append(
             {
                 "slug": org.slug,
@@ -125,7 +151,8 @@ def metrics(days: int = 14, db: Session = Depends(get_db)):
             func.count(UsageEvent.id).label("msgs"),
             func.coalesce(func.sum(UsageEvent.cost_usd), 0.0).label("cost"),
         )
-        .where(UsageEvent.result == "ok", UsageEvent.created_at >= month_start())
+        .where(UsageEvent.result == "ok", UsageEvent.created_at >= month_start(),
+               *usage_where)
         .group_by(UsageEvent.user_id)
         .order_by(func.count(UsageEvent.id).desc())
         .limit(10)
@@ -149,17 +176,20 @@ def metrics(days: int = 14, db: Session = Depends(get_db)):
     # ---- segurança ----------------------------------------------------------
     failed_logins_24h = db.scalar(
         select(func.count(AuthEvent.id)).where(
-            AuthEvent.success.is_(False), AuthEvent.created_at >= last_24h
+            AuthEvent.success.is_(False), AuthEvent.created_at >= last_24h,
+            *auth_where,
         )
     ) or 0
     rate_limited_24h = db.scalar(
         select(func.count(UsageEvent.id)).where(
-            UsageEvent.result == "rate_limited", UsageEvent.created_at >= last_24h
+            UsageEvent.result == "rate_limited", UsageEvent.created_at >= last_24h,
+            *usage_where,
         )
     ) or 0
     quota_exceeded_24h = db.scalar(
         select(func.count(UsageEvent.id)).where(
-            UsageEvent.result == "quota_exceeded", UsageEvent.created_at >= last_24h
+            UsageEvent.result == "quota_exceeded", UsageEvent.created_at >= last_24h,
+            *usage_where,
         )
     ) or 0
     recent_auth = [
@@ -172,10 +202,11 @@ def metrics(days: int = 14, db: Session = Depends(get_db)):
             "at": e.created_at.isoformat() + "Z",
         }
         for e in db.scalars(
-            select(AuthEvent).order_by(AuthEvent.created_at.desc()).limit(20)
+            select(AuthEvent).where(*auth_where)
+            .order_by(AuthEvent.created_at.desc()).limit(20)
         ).all()
     ]
-    top_ips = _top_ips(db, last_24h)
+    top_ips = _top_ips(db, last_24h, auth_where)
 
     return {
         "generated_at": now.isoformat() + "Z",
@@ -202,9 +233,11 @@ def metrics(days: int = 14, db: Session = Depends(get_db)):
     }
 
 
-def _top_ips(db: Session, since: datetime):
+def _top_ips(db: Session, since: datetime, auth_where: list):
     rows = db.execute(
-        select(AuthEvent.ip, AuthEvent.success).where(AuthEvent.created_at >= since)
+        select(AuthEvent.ip, AuthEvent.success).where(
+            AuthEvent.created_at >= since, *auth_where
+        )
     ).all()
     counts = {}
     for ip, success in rows:
@@ -234,8 +267,12 @@ def _user_row(db: Session, user: User) -> dict:
 
 
 @router.get("/users")
-def list_users(db: Session = Depends(get_db)):
-    users = db.scalars(select(User).order_by(User.email)).all()
+def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    org_id = _scope_org_id(admin)
+    query = select(User).order_by(User.email)
+    if org_id:
+        query = query.where(User.organization_id == org_id)
+    users = db.scalars(query).all()
     return {"users": [_user_row(db, u) for u in users]}
 
 
@@ -250,12 +287,18 @@ class CreateUserRequest(BaseModel):
 
 
 @router.post("/users", status_code=201)
-def create_user(body: CreateUserRequest, db: Session = Depends(get_db)):
+def create_user(body: CreateUserRequest, admin: User = Depends(require_admin),
+                db: Session = Depends(get_db)):
     if body.role not in ROLES:
         raise HTTPException(422, f"Papel inválido. Use um de: {', '.join(ROLES)}.")
+    if body.role == "superadmin" and admin.role != "superadmin":
+        raise HTTPException(403, "Só um superadmin pode criar contas superadmin.")
     org = db.scalar(select(Organization).where(Organization.slug == body.org_slug))
     if org is None:
         raise HTTPException(404, "Organização não encontrada.")
+    org_id = _scope_org_id(admin)
+    if org_id and org.id != org_id:
+        raise HTTPException(403, "Você só pode convidar usuários da própria organização.")
     email = body.email.strip().lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(409, "Já existe um usuário com esse e-mail.")
@@ -282,13 +325,19 @@ class UpdateUserRequest(BaseModel):
 @router.patch("/users/{user_id}")
 def update_user(user_id: int, body: UpdateUserRequest,
                 admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    org_id = _scope_org_id(admin)
     user = db.get(User, user_id)
-    if user is None:
+    # 404 (e não 403) para usuário de outro tenant: não revela que o id existe
+    if user is None or (org_id and user.organization_id != org_id):
         raise HTTPException(404, "Usuário não encontrado.")
+    if user.role == "superadmin" and admin.role != "superadmin":
+        raise HTTPException(403, "Só um superadmin pode alterar contas superadmin.")
     if body.role is not None:
         if body.role not in ROLES:
             raise HTTPException(422, f"Papel inválido. Use um de: {', '.join(ROLES)}.")
-        if user.id == admin.id and body.role != "admin":
+        if body.role == "superadmin" and admin.role != "superadmin":
+            raise HTTPException(403, "Só um superadmin pode conceder o papel superadmin.")
+        if user.id == admin.id and body.role != admin.role:
             raise HTTPException(422, "Você não pode rebaixar a própria conta.")
         user.role = body.role
     if body.is_active is not None:
@@ -305,8 +354,13 @@ def update_user(user_id: int, body: UpdateUserRequest,
 
 # -------------------------------------------------------------- organizações
 @router.get("/organizations")
-def list_organizations(db: Session = Depends(get_db)):
-    orgs = db.scalars(select(Organization).order_by(Organization.name)).all()
+def list_organizations(admin: User = Depends(require_admin),
+                       db: Session = Depends(get_db)):
+    org_id = _scope_org_id(admin)
+    query = select(Organization).order_by(Organization.name)
+    if org_id:
+        query = query.where(Organization.id == org_id)
+    orgs = db.scalars(query).all()
     return {
         "organizations": [
             {
@@ -327,8 +381,11 @@ class UpdateOrgRequest(BaseModel):
     monthly_cost_limit_usd: Optional[float] = Field(default=None, ge=0)
 
 
-@router.patch("/organizations/{slug}")
+@router.patch("/organizations/{slug}",
+              dependencies=[Depends(require_superadmin)])
 def update_organization(slug: str, body: UpdateOrgRequest, db: Session = Depends(get_db)):
+    # cotas são o controle de cobrança da TeIA: um admin de tenant não pode
+    # elevar os próprios limites
     org = db.scalar(select(Organization).where(Organization.slug == slug))
     if org is None:
         raise HTTPException(404, "Organização não encontrada.")
