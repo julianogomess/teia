@@ -23,6 +23,7 @@ TeIA é uma organização que vem do setor de impacto (ONGs, fundações, organi
 - [`docs/arquitetura-c4.md`](docs/arquitetura-c4.md) — arquitetura do chat em modelo C4 (Mermaid), incluindo o desenho de separação de cobrança por cliente e a tabela demo → produção.
 - [`docs/prompt-servidor-v1.md`](docs/prompt-servidor-v1.md) — o prompt/especificação que guiou a construção do servidor v1.
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) e [`docs/superpowers/plans/`](docs/superpowers/plans/) — design aprovado e plano de execução da **base de conhecimento indexada** (tags hierárquicas + busca híbrida termos/vetorial), implementada em `server/app/kb/`.
+- [`docs/plano-implantacao-producao.md`](docs/plano-implantacao-producao.md) — plano de implantação em produção na AWS em fases de custo (Lightsail → RDS/EC2 → escala horizontal).
 - [`docker-compose.yml`](docker-compose.yml) — PostgreSQL 16 local para o servidor v1 (requer Docker Desktop).
 
 ## Servidor v1 (produção)
