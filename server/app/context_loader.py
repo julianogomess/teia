@@ -6,7 +6,7 @@ do preço de entrada — ver context/custos-ia.md.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import func as sa_func
 from sqlalchemy import select
@@ -35,9 +35,9 @@ REGRAS DE ESCOPO (obrigatórias):
 ESTILO DE CONVERSA (obrigatório):
 - Responda como uma pessoa conversando, não como um documento. Escreva em
   parágrafos curtos e corridos, como numa troca de mensagens.
-- NÃO use formatação Markdown: nada de títulos (#), negrito (**), itálico,
-  listas com hífen ou numeração, tabelas ou blocos de código. O chat exibe
-  texto puro, então esses símbolos aparecem literalmente para o usuário.
+- Use formatação Markdown leve quando ajudar a leitura: negrito para
+  destaques, itálico, listas curtas com hífen e no máximo subtítulos
+  pequenos (###). Nada de tabelas, blocos de código ou títulos grandes.
 - Seja direto: comece respondendo a pergunta, sem preâmbulos como "Ótima
   pergunta" ou "Com base na minha base de conhecimento".
 - Prefira respostas curtas (2 a 4 parágrafos). Se o assunto tiver muitos
@@ -45,6 +45,13 @@ ESTILO DE CONVERSA (obrigatório):
   detalhe X?".
 - Se precisar enumerar poucos itens, faça isso dentro da própria frase
   ("são três frentes: educação, cultura e segurança alimentar").
+
+CONTINUAÇÕES SUGERIDAS:
+- Responda sempre em texto corrido. Se — e somente se — houver caminhos
+  claros de aprofundamento, chame a ferramenta sugerir_continuacoes ao
+  final, com 2 a 4 opções curtas (até 80 caracteres), cada uma escrita como
+  a próxima mensagem do usuário (ex.: "Como funciona o reembolso?").
+- Não chame a ferramenta quando a resposta encerrar o assunto.
 """
 
 
@@ -69,12 +76,12 @@ def has_indexed_documents(db, org_id: int) -> bool:
 
 
 def build_system_blocks(org: Organization, db=None,
-                        query: Optional[str] = None) -> List[dict]:
-    """Blocos de system prompt: regras + base de conhecimento.
+                        query: Optional[str] = None) -> Tuple[List[dict], List[dict]]:
+    """Blocos de system prompt + fontes dos trechos usados.
 
-    Com documentos indexados, a base vira só os trechos relevantes para a
-    pergunta (busca híbrida) — rápido e barato. Sem documentos indexados,
-    mantém a pasta concatenada com cache (comportamento original).
+    Retorna (blocks, sources). Com documentos indexados, sources lista os
+    arquivos (deduplicados) de onde vieram os trechos; no fallback de pasta
+    concatenada, sources é vazio.
     """
     intro = (
         f"Você é o assistente de chat da TeIA a serviço de: {org.name}.\n"
@@ -85,9 +92,14 @@ def build_system_blocks(org: Organization, db=None,
         from .kb.search import search_chunks  # tardio: evita ciclo de import
 
         parts = []
+        sources = []
+        vistos = set()
         for hit in search_chunks(db, org.id, query):
             label = hit.filename + (f" · {', '.join(hit.tags)}" if hit.tags else "")
             parts.append(f"[{label}]\n{hit.text}")
+            if hit.filename not in vistos:
+                vistos.add(hit.filename)
+                sources.append({"filename": hit.filename, "tags": hit.tags})
         kb = "\n\n---\n\n".join(parts) or (
             "Nenhum trecho da base de conhecimento casou com esta pergunta."
         )
@@ -100,7 +112,7 @@ def build_system_blocks(org: Organization, db=None,
             {"type": "text", "text": intro},
             {"type": "text",
              "text": f"<base_de_conhecimento>\n{kb}\n</base_de_conhecimento>"},
-        ]
+        ], sources
     kb = load_context(org.context_dir)
     return [
         {"type": "text", "text": intro},
@@ -109,4 +121,4 @@ def build_system_blocks(org: Organization, db=None,
             "text": f"<base_de_conhecimento>\n{kb}\n</base_de_conhecimento>",
             "cache_control": {"type": "ephemeral"},
         },
-    ]
+    ], []

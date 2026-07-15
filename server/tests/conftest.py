@@ -110,20 +110,27 @@ def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+class FakeAnthropicCalls(list):
+    """Chamadas capturadas + resposta configurável pelo teste."""
+    reply = "resposta de teste"
+    tool_input = None
+
+
 @pytest.fixture()
 def fake_anthropic(monkeypatch):
     """Substitui a chamada real ao modelo; captura o que seria enviado."""
-    calls = []
+    calls = FakeAnthropicCalls()
 
-    def fake_send(api_key, system_blocks, messages, model=None):
-        calls.append({"api_key": api_key, "system": system_blocks, "messages": messages})
+    def fake_send(api_key, system_blocks, messages, model=None, tools=None):
+        calls.append({"api_key": api_key, "system": system_blocks,
+                      "messages": messages, "tools": tools})
         usage = {
             "input_tokens": 1000,
             "output_tokens": 200,
             "cache_read_input_tokens": 0,
             "cache_creation_input_tokens": 0,
         }
-        return "resposta de teste", usage, 42
+        return calls.reply, calls.tool_input, usage, 42
 
     monkeypatch.setattr("app.routers.chat.send_message", fake_send)
     return calls
