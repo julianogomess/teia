@@ -196,6 +196,37 @@
     margin-bottom: 4px;
   }
 
+  .msg.assistant { white-space: normal; }
+  .msg .body p { margin: 0 0 8px; }
+  .msg .body p:last-child, .msg .body ul:last-child { margin-bottom: 0; }
+  .msg .body ul { margin: 0 0 8px; padding-left: 20px; }
+  .msg .body h4 {
+    margin: 10px 0 4px;
+    font-family: 'Source Serif 4', serif;
+    font-size: 15px;
+  }
+  .msg .body code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    background: rgba(42, 27, 20, 0.08);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .copy-btn {
+    float: right;
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.5;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 0;
+  }
+  .copy-btn:hover { opacity: 1; }
+
   .msg.pending {
     opacity: 0.6;
     font-family: 'IBM Plex Mono', monospace;
@@ -400,6 +431,39 @@
     location.href = '/';
   });
 
+  // Markdown leve e seguro: escapa TODO o HTML primeiro, depois aplica
+  // negrito/itálico/código/listas/títulos sobre o texto já escapado.
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function inlineMd(s) {
+    return s
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/\*([^*]+)\*/g, '<i>$1</i>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  function renderMarkdown(text) {
+    const out = [];
+    let list = null;
+    for (const line of escapeHtml(text).split('\n')) {
+      const item = line.match(/^\s*[-*]\s+(.+)$/);
+      if (item) {
+        if (!list) { list = []; }
+        list.push('<li>' + inlineMd(item[1]) + '</li>');
+        continue;
+      }
+      if (list) { out.push('<ul>' + list.join('') + '</ul>'); list = null; }
+      const heading = line.match(/^#{1,4}\s+(.+)$/);
+      if (heading) { out.push('<h4>' + inlineMd(heading[1]) + '</h4>'); continue; }
+      if (line.trim() !== '') { out.push('<p>' + inlineMd(line) + '</p>'); }
+    }
+    if (list) { out.push('<ul>' + list.join('') + '</ul>'); }
+    return out.join('');
+  }
+
   function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
@@ -408,7 +472,23 @@
     label.textContent = role === 'user' ? 'Você' : 'Te[IA]';
     div.appendChild(label);
     const body = document.createElement('span');
-    body.textContent = text;
+    body.className = 'body';
+    if (role === 'assistant') {
+      body.innerHTML = renderMarkdown(text);  // renderMarkdown já escapou o HTML
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'copy-btn';
+      copy.textContent = 'copiar';
+      copy.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          copy.textContent = 'copiado';
+          setTimeout(() => { copy.textContent = 'copiar'; }, 1500);
+        });
+      });
+      label.appendChild(copy);
+    } else {
+      body.textContent = text;
+    }
     div.appendChild(body);
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
