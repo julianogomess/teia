@@ -6,6 +6,7 @@ organização do admin logado: cada tenant gerencia apenas a própria base.
 
 import io
 import zipfile
+from datetime import datetime
 from typing import List, Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -196,3 +197,52 @@ def kb_search(q: str, admin: User = Depends(require_admin),
          "score": round(h.score, 6)}
         for h in hits
     ]}
+
+
+# ---------------------------------------------------------------------- grafo
+@router.get("/graph")
+def knowledge_graph(admin: User = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    """Nós (tags e documentos) e arestas (hierarquia e doc↔tag) da org do
+    admin. Só metadados — nenhum texto de chunk sai por aqui."""
+    org_id = admin.organization_id
+    tags = db.scalars(
+        select(Tag).where(Tag.organization_id == org_id).order_by(Tag.path)
+    ).all()
+    docs = db.scalars(
+        select(Document).where(Document.organization_id == org_id)
+        .order_by(Document.filename)
+    ).all()
+    links = db.execute(
+        select(DocumentTag.document_id, DocumentTag.tag_id)
+        .join(Tag, Tag.id == DocumentTag.tag_id)
+        .where(Tag.organization_id == org_id)
+    ).all()
+
+    nodes = [
+        {"id": f"tag:{t.id}", "kind": "tag",
+         "label": t.path.rsplit("/", 1)[-1], "path": t.path,
+         "status": t.status}
+        for t in tags
+    ] + [
+        {"id": f"doc:{d.id}", "kind": "doc", "label": d.filename,
+         "status": d.status, "chunk_count": d.chunk_count}
+        for d in docs
+    ]
+
+    tag_by_path = {t.path: t for t in tags}
+    edges = []
+    for t in tags:
+        if "/" in t.path:
+            parent = tag_by_path.get(t.path.rsplit("/", 1)[0])
+            if parent is not None:
+                edges.append({"source": f"tag:{parent.id}",
+                              "target": f"tag:{t.id}", "kind": "hierarchy"})
+    doc_ids = {d.id for d in docs}
+    for document_id, tag_id in links:
+        if document_id in doc_ids:
+            edges.append({"source": f"doc:{document_id}",
+                          "target": f"tag:{tag_id}", "kind": "doc_tag"})
+
+    return {"nodes": nodes, "edges": edges,
+            "generated_at": datetime.utcnow().isoformat() + "Z"}
