@@ -44,8 +44,9 @@ aprovação.
 
 ### Backend
 
-- Rota nova `GET /api/graph` no router de KB (`app/routers/documents.py`),
-  com `Depends(require_admin)` como as demais rotas de administração.
+- Rota nova `GET /api/admin/graph` no router de KB
+  (`app/routers/documents.py`, prefixo `/api/admin`), com
+  `Depends(require_admin)` como as demais rotas de administração.
   Toda query filtra por `organization_id` do usuário do token — isolamento
   entre tenants é o invariante nº 1.
 - Resposta: `{nodes, edges, generated_at}`.
@@ -72,7 +73,7 @@ aprovação.
   associados; documento mostra suas tags e nº de trechos. Dados vêm do
   próprio grafo já carregado — sem chamadas extras por clique.
 - Busca por nome com destaque do nó; zoom/pan/arrastar nativos da lib;
-  botão "atualizar" refaz o `GET /api/graph` e redesenha.
+  botão "atualizar" refaz o `GET /api/admin/graph` e redesenha.
 - Copy da tela revisada com a skill `tom-teia` e o agente
   `revisor-de-marca` antes do commit, conforme
   `.claude/rules/texto-marca.md`.
