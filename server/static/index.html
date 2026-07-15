@@ -425,7 +425,7 @@
     const b = document.createElement('b');
     b.textContent = currentUser.org_label;
     chatIntro.replaceChildren(intro, b, document.createTextNode('.'));
-    if (currentUser.role === 'admin') adminLink.classList.remove('hidden');
+    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') adminLink.classList.remove('hidden');
     logoutLink.classList.remove('hidden');
     loginSection.classList.add('hidden');
     chatSection.classList.remove('hidden');
