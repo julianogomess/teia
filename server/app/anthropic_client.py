@@ -58,8 +58,15 @@ def send_message(
     system_blocks: List[dict],
     messages: List[dict],
     model: Optional[str] = None,
-) -> Tuple[str, dict, int]:
-    """Envia a conversa ao modelo. Retorna (texto, usage, latência_ms)."""
+    tools: Optional[List[dict]] = None,
+) -> Tuple[str, Optional[dict], dict, int]:
+    """Envia a conversa ao modelo.
+
+    Retorna (texto, tool_input, usage, latência_ms). `tool_input` é o input
+    do primeiro bloco tool_use, quando `tools` for oferecido e o modelo
+    chamar a ferramenta — canal de saída estruturada, sem loop de agente
+    (nunca devolvemos tool_result).
+    """
     model = model or settings.anthropic_model
     payload = {
         "model": model,
@@ -67,6 +74,8 @@ def send_message(
         "system": system_blocks,
         "messages": messages,
     }
+    if tools:
+        payload["tools"] = tools
     started = time.monotonic()
     try:
         response = httpx.post(
@@ -92,4 +101,9 @@ def send_message(
         for block in data.get("content", [])
         if block.get("type") == "text"
     )
-    return reply, data.get("usage", {}), latency_ms
+    tool_input = next(
+        (block.get("input") for block in data.get("content", [])
+         if block.get("type") == "tool_use"),
+        None,
+    )
+    return reply, tool_input, data.get("usage", {}), latency_ms

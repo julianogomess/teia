@@ -51,7 +51,7 @@ def classify_document(api_key: str, taxonomy: List[str],
         filename=filename,
         text=text[:settings.kb_classify_excerpt_chars],
     )
-    reply, _usage, _latency = send_message(
+    reply, _tool_input, _usage, _latency = send_message(
         api_key,
         [{"type": "text", "text": "Você é um classificador de documentos."}],
         [{"role": "user", "content": prompt}],

@@ -117,8 +117,8 @@ def test_normaliza_caminhos_de_tag():
 
 
 def test_classifica_documento(monkeypatch):
-    def fake_send(api_key, system_blocks, messages, model=None):
-        return ('["rh/beneficios/ferias", "RH/Contratos", "///"]',
+    def fake_send(api_key, system_blocks, messages, model=None, tools=None):
+        return ('["rh/beneficios/ferias", "RH/Contratos", "///"]', None,
                 {"input_tokens": 10}, 5)
 
     monkeypatch.setattr("app.kb.classify.send_message", fake_send)
@@ -127,8 +127,8 @@ def test_classifica_documento(monkeypatch):
 
 
 def test_classificacao_resposta_invalida(monkeypatch):
-    def fake_send(api_key, system_blocks, messages, model=None):
-        return ("não sei classificar", {}, 5)
+    def fake_send(api_key, system_blocks, messages, model=None, tools=None):
+        return ("não sei classificar", None, {}, 5)
 
     monkeypatch.setattr("app.kb.classify.send_message", fake_send)
     assert classify_document("chave", [], "a.md", "texto") == []
