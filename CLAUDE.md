@@ -16,6 +16,15 @@ TeIA — IA para o setor de impacto: chat multi-tenant com Claude. Docs, UI e te
 - **No produto**: nunca concatenar bases inteiras no prompt quando houver índice — busca híbrida (`server/app/kb/`) envia só os ~8 chunks relevantes; prompt caching sempre ativo (maior alavanca de custo, ver `context/custos-ia.md`).
 - **No trabalho neste repo**: ler trechos, não arquivos inteiros; não duplicar conteúdo existente em docs novas — linkar a fonte; respostas e documentos enxutos.
 
+## Orquestração de demandas complexas (Fable → Opus)
+
+Quando uma demanda se decompõe em **3+ tasks independentes e bem definidas**, orquestre em vez de executar tudo sozinho (design em docs/superpowers/specs/2026-07-14-orquestracao-fable-opus-design.md):
+
+- Decomponha e mantenha para si as tasks de raciocínio complexo (arquitetura, segurança, decisões); despache as simples ao agente `executor-opus` — **em paralelo** quando não houver dependência entre elas.
+- Cada prompt de task deve ser auto-contido: paths, contexto necessário e critério de aceite (o worker parte frio).
+- Ao receber os resultados, revise criticamente (correção, isolamento multi-tenant, padrões do repo), corrija o necessário, integre e só então reporte.
+- Fora do gatilho (menos de 3 tasks, ou tasks encadeadas): execute direto, sem orquestrar.
+
 ## Comandos
 
 Tudo com `py` (Windows). **NUNCA fazer `cd` persistente para subpastas** — os hooks deste repo rodam com caminho relativo à raiz e passam a bloquear toda a shell. Usar subshell no Bash: `(cd server && ...)`.
