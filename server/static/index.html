@@ -547,6 +547,7 @@
         chip.className = 'chip';
         chip.textContent = opt;
         chip.addEventListener('click', () => {
+          if (sendBtn.disabled) return;
           chips.querySelectorAll('.chip').forEach(c => c.disabled = true);
           sendMessage(opt);
         });
@@ -588,9 +589,10 @@
       } else if (!res.ok) {
         addMessage('assistant', `Erro: ${data.detail || 'falha inesperada.'}`);
       } else {
-        addMessage('assistant', data.reply,
+        const replyText = data.reply || 'Não consegui tecer a resposta agora. Pode tentar de novo?';
+        addMessage('assistant', replyText,
                    { options: data.options, sources: data.sources });
-        history.push({ role: 'assistant', content: data.reply });
+        history.push({ role: 'assistant', content: replyText });
       }
     } catch (err) {
       pending.remove();

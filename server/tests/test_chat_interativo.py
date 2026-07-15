@@ -93,3 +93,12 @@ def test_regras_permitem_markdown_e_ferramenta(client, seed, fake_anthropic):
     system_text = "\n".join(b["text"] for b in fake_anthropic[0]["system"])
     assert "sugerir_continuacoes" in system_text
     assert "Markdown leve" in system_text
+
+
+def test_ferramenta_sem_texto_segue_sem_opcoes(client, seed, fake_anthropic):
+    fake_anthropic.reply = ""
+    fake_anthropic.tool_input = {"opcoes": ["a", "b"]}
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    data = _chat(client, token).json()
+    assert data["reply"] == ""
+    assert data["options"] == []
