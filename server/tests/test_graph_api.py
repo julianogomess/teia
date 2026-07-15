@@ -63,3 +63,9 @@ def test_member_recebe_403(client, seed):
     token = login(client, "maria@raizes.org.br", "senha-maria-123")
     res = client.get("/api/admin/graph", headers=auth_headers(token))
     assert res.status_code == 403
+
+
+def test_pagina_graph_servida(client):
+    res = client.get("/graph")
+    assert res.status_code == 200
+    assert "text/html" in res.headers["content-type"]

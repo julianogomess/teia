@@ -143,6 +143,13 @@ def admin_page():
     return FileResponse(STATIC_DIR / "admin.html")
 
 
+@app.get("/graph", include_in_schema=False)
+def graph_page():
+    # Casca do grafo da base de conhecimento; os dados vêm de
+    # /api/admin/graph, que exige papel admin no servidor.
+    return FileResponse(STATIC_DIR / "graph.html")
+
+
 @app.get("/healthz", include_in_schema=False)
 def healthz():
     return {"ok": True}
