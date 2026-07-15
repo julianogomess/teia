@@ -46,3 +46,50 @@ def test_chat_responde_sources(client, seed, fake_anthropic):
     )
     assert res.status_code == 200
     assert res.json()["sources"] == []
+
+
+def _chat(client, token, texto="oi"):
+    return client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": texto}]},
+        headers=auth_headers(token),
+    )
+
+
+def test_chat_retorna_opcoes(client, seed, fake_anthropic):
+    fake_anthropic.tool_input = {
+        "opcoes": ["Como funciona o reembolso?", "Quais são os prazos?"]}
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    data = _chat(client, token).json()
+    assert data["reply"] == "resposta de teste"
+    assert data["options"] == [
+        "Como funciona o reembolso?", "Quais são os prazos?"]
+    # a ferramenta foi oferecida ao modelo
+    assert fake_anthropic[0]["tools"][0]["name"] == "sugerir_continuacoes"
+
+
+def test_chat_sem_opcoes(client, seed, fake_anthropic):
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    assert _chat(client, token).json()["options"] == []
+
+
+def test_opcoes_validadas_e_truncadas(client, seed, fake_anthropic):
+    fake_anthropic.tool_input = {"opcoes": [
+        "   ", "x" * 200, 42, "a", "b", "c", "d"]}
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    options = _chat(client, token).json()["options"]
+    assert options == ["x" * 80, "a", "b", "c"]  # máx. 4, 80 chars, sem lixo
+
+
+def test_tool_input_malformado(client, seed, fake_anthropic):
+    fake_anthropic.tool_input = {"foo": "bar"}
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    assert _chat(client, token).json()["options"] == []
+
+
+def test_regras_permitem_markdown_e_ferramenta(client, seed, fake_anthropic):
+    token = login(client, "maria@raizes.org.br", "senha-maria-123")
+    _chat(client, token)
+    system_text = "\n".join(b["text"] for b in fake_anthropic[0]["system"])
+    assert "sugerir_continuacoes" in system_text
+    assert "Markdown leve" in system_text

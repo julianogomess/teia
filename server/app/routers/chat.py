@@ -1,5 +1,6 @@
 """Endpoint de chat: valida, aplica limites/cotas, chama o modelo e registra o uso."""
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,6 +22,46 @@ from ..quotas import check_quotas
 from ..rate_limit import chat_concurrency, chat_limiter
 
 router = APIRouter(tags=["chat"])
+
+logger = logging.getLogger(__name__)
+
+MAX_OPTIONS = 4
+MAX_OPTION_CHARS = 80
+
+SUGERIR_CONTINUACOES_TOOL = {
+    "name": "sugerir_continuacoes",
+    "description": (
+        "Sugere de 2 a 4 continuações curtas para a conversa, quando houver "
+        "caminhos claros de aprofundamento. Cada opção é escrita como a "
+        "próxima mensagem que o usuário enviaria."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "opcoes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 2,
+                "maxItems": 4,
+                "description": "Continuações sugeridas, até 80 caracteres cada.",
+            }
+        },
+        "required": ["opcoes"],
+    },
+}
+
+
+def _parse_options(tool_input) -> List[str]:
+    """Valida o input da ferramenta: máx. 4 opções, 80 chars, sem vazios."""
+    if not isinstance(tool_input, dict) or not isinstance(tool_input.get("opcoes"), list):
+        return []
+    options: List[str] = []
+    for item in tool_input["opcoes"]:
+        if isinstance(item, str) and item.strip():
+            options.append(item.strip()[:MAX_OPTION_CHARS])
+        if len(options) == MAX_OPTIONS:
+            break
+    return options
 
 
 class ChatMessage(BaseModel):
@@ -93,12 +134,20 @@ def chat(body: ChatRequest, user: User = Depends(get_current_user),
         messages = [m.model_dump() for m in body.messages[-settings.max_history_messages:]]
         system_blocks, sources = build_system_blocks(
             org, db=db, query=body.messages[-1].content)
-        reply, usage, latency_ms = send_message(api_key, system_blocks, messages)
+        reply, tool_input, usage, latency_ms = send_message(
+            api_key, system_blocks, messages,
+            tools=[SUGERIR_CONTINUACOES_TOOL],
+        )
     except AnthropicError as exc:
         _record(db, user, "error", latency_ms=0)
         raise HTTPException(502, f"Erro ao consultar o modelo ({exc.status}). Tente novamente.")
     finally:
         chat_concurrency.release(key)
+
+    if not reply and tool_input:
+        # raro: modelo chamou a ferramenta sem escrever texto — segue sem opções
+        logger.warning("modelo chamou ferramenta sem texto (org=%s)", org.slug)
+        tool_input = None
 
     _record(
         db,
@@ -111,4 +160,5 @@ def chat(body: ChatRequest, user: User = Depends(get_current_user),
         cost_usd=estimate_cost_usd(settings.anthropic_model, usage),
         latency_ms=latency_ms,
     )
-    return {"reply": reply, "sources": sources}
+    return {"reply": reply, "options": _parse_options(tool_input),
+            "sources": sources}
